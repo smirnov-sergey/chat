@@ -1,0 +1,24 @@
+openapi: 3.1.0
+
+info:
+  title: Chat API
+  description: @TODO
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8080
+    description: Local development server
+
+tags:
+  @TODO
+
+paths:
+  @TODO
+
+components:
+  parameters:
+    @TODO
+
+  schemas:
+    @TODO
+
