@@ -1,0 +1,17 @@
+name: chat-swagger
+
+services:
+  swagger-ui:
+    image: swaggerapi/swagger-ui:v5.32.15@sha256:9ae209e3791e6fa78e1426769bf54562a043caa969287bfd3779428ece4930e5
+    container_name: chat-swagger-ui
+    ports:
+      - "127.0.0.1:8081:8080"
+    environment:
+      SWAGGER_JSON: /openapi/openapi.yaml
+    volumes:
+      - ../docs/openapi.yaml:/openapi/openapi.yaml:ro
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "5"
