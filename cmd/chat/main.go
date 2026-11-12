@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -11,7 +12,10 @@ import (
 	"syscall"
 	"time"
 
+	"chat/internal/config"
 	"chat/internal/httpapi"
+
+	"github.com/joho/godotenv"
 )
 
 func main() {
@@ -22,11 +26,16 @@ func main() {
 }
 
 func run() error {
+	if err := godotenv.Load(); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("load .env: %w", err)
+	}
+	cfg := config.Load()
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
 	server := &http.Server{
-		Addr:              "127.0.0.1:8080",
+		Addr:              cfg.HTTPAddr,
 		Handler:           httpapi.NewRouter(),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
