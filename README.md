@@ -10,7 +10,8 @@ Chat — небольшой самостоятельно развёртывае�
 
 На текущий момент Chat поддерживает:
 
-@TODO
+- локальный HTTP-сервер на `127.0.0.1:8080`;
+- проверку работоспособности через `GET /health`.
 
 Подробное текущее состояние и завершённые этапы находятся в
 [`docs/ROADMAP.md`](docs/ROADMAP.md).
@@ -52,7 +53,19 @@ ADR/     исторические архитектурные решения
 
 Backend:
 
-@TODO
+Требуется Go 1.26.9 или новее. Из корня репозитория:
+
+```powershell
+go run ./cmd/chat
+```
+
+Проверка в другом терминале:
+
+```powershell
+curl.exe -i http://127.0.0.1:8080/health
+```
+
+Ожидаемый ответ: `200 OK` и `{"status":"ok"}`. Остановка — `Ctrl+C`.
 
 Frontend
 
@@ -93,7 +106,11 @@ Frontend
 
 Backend:
 
-@TODO
+```powershell
+gofmt -w cmd internal
+go test ./...
+go vet ./...
+```
 
 Frontend:
 
