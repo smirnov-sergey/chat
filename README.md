@@ -14,6 +14,9 @@ Chat — небольшой самостоятельно развёртывае�
 - проверку работоспособности через `GET /health`;
 - корректную остановку HTTP-сервера с ожиданием активных запросов.
 
+Также реализованы подключение к PostgreSQL и отдельная команда SQL-миграций.
+Пользователи, переписки и веб-интерфейс пока не реализованы.
+
 Подробное текущее состояние и завершённые этапы находятся в
 [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
@@ -27,20 +30,22 @@ Chat — небольшой самостоятельно развёртывае�
 
 # Используемые технологии
 
-@TODO
+Go, PostgreSQL, Docker Compose. HTTP-сервер использует стандартную библиотеку
+Go, подключение к БД — `database/sql` с pgx, миграции — goose.
 
 ---
 
 # Структура проекта
 
-@TODO
 ```text
-@TODO/   точка входа и CLI
-@TODO/   backend: домены, HTTP, сервисы и инфраструктура
-@TODO/   Vue-приложение и Playwright-сценарии
-docker/  development, production и Swagger UI
-docs/    текущая проектная документация
-ADR/     исторические архитектурные решения
+cmd/chat/           HTTP-сервер
+cmd/migrate/        команда применения миграций
+internal/           конфигурация, HTTP, PostgreSQL и миграции
+tests/integration/  тесты с реальной PostgreSQL
+migrations/         правила и будущие SQL-миграции
+docker/             development-окружение и Swagger UI
+docs/               документация проекта
+.github/workflows/  CI
 ```
 
 Актуальные границы компонентов описаны в
@@ -79,7 +84,7 @@ curl.exe -i http://127.0.0.1:8080/health
 
 Frontend
 
-@TODO 
+Пока не реализован.
 
 ---
 
@@ -87,7 +92,7 @@ Frontend
 
 ### Production
 
-@TODO
+Пока не реализован.
 
 ### Development
 
@@ -175,22 +180,9 @@ go build -o chat.exe ./cmd/chat
 
 # Тестирование
 
-Backend:
-
-```powershell
-gofmt -w cmd internal
-go test ./...
-go test -tags=integration ./tests/integration
-go vet ./...
-```
-
-`go test ./...` выполняет проверки без PostgreSQL. Integration-тесты с реальной
-БД находятся в `tests/integration` и запускаются отдельно с тегом `integration`.
-Подготовка базы описана в [`migrations/README.md`](migrations/README.md#проверка-на-отдельной-базе).
-
-Frontend:
-
-@TODO
+Unit- и компонентные тесты работают без PostgreSQL. Integration-тесты
+запускаются отдельно с тегом `integration` и используют выделенную базу.
+Подготовка окружения и все команды — в [`docs/TESTING.md`](docs/TESTING.md).
 
 ---
 
@@ -200,12 +192,12 @@ Frontend:
 Текущее поведение определяют профильные источники истины. 
 Исторические документы не должны использоваться вместо них.
 
-* `CHANGELOG.md` — история выпусков и заметных изменений продукта.
 * `ARCHITECTURE.md` — текущая архитектура и направления зависимостей.
 * `CONTRIBUTING.md` — правила разработки.
+* [`docs/TESTING.md`](docs/TESTING.md) — подготовка окружения и запуск тестов.
 * `DOMAIN_MODEL.md` — понятия предметной области, связи и бизнес-инварианты.
 * `FEATURE_DESIGN.md` — долгосрочные идеи и возможные направления развития.
-* `FRONTEND_DESIGN.md` — текущая архитектура и пользовательские сценарии frontend.
+* `FRONTEND_DESIGN.md` — набросок будущего frontend; реализации пока нет.
 * `ROADMAP.md` — текущее состояние, завершённые этапы и дальнейшие направления.
 * `openapi.yaml` — публичный HTTP-контракт Chat API.
 * `vision.md` — долгосрочное видение проекта.

@@ -81,11 +81,10 @@ docker compose --env-file .env -f docker/docker-compose.dev.yml down
 выполните `down`, запустите Compose снова и убедитесь, что строка сохранилась.
 После проверки удалите тестовую таблицу.
 
-## Тест подключения
+## Тестирование
 
-Для integration-тестов нужна отдельная база с общими учётными данными.
-Подготовка `POSTGRES_TEST_DB` и команды запуска описаны в
-[`migrations/README.md`](../migrations/README.md#проверка-на-отдельной-базе).
+Подготовка отдельной базы и команды тестирования описаны в
+[`docs/TESTING.md`](../docs/TESTING.md).
 
 ## Swagger UI
 
