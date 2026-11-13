@@ -180,8 +180,13 @@ Backend:
 ```powershell
 gofmt -w cmd internal
 go test ./...
+go test -tags=integration ./tests/integration
 go vet ./...
 ```
+
+`go test ./...` выполняет проверки без PostgreSQL. Integration-тесты с реальной
+БД находятся в `tests/integration` и запускаются отдельно с тегом `integration`.
+Подготовка базы описана в [`migrations/README.md`](migrations/README.md#проверка-на-отдельной-базе).
 
 Frontend:
 

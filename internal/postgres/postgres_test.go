@@ -3,16 +3,10 @@ package postgres_test
 import (
 	"context"
 	"errors"
-	"os"
-	"path/filepath"
-	"runtime"
 	"testing"
 	"time"
 
-	"chat/internal/config"
 	"chat/internal/postgres"
-
-	"github.com/joho/godotenv"
 )
 
 func TestOpenRejectsInvalidConnectionString(t *testing.T) {
@@ -64,45 +58,5 @@ func TestOpenHonorsContext(t *testing.T) {
 				t.Errorf("error = %v, want %v", err, tt.want)
 			}
 		})
-	}
-}
-
-func TestOpenIntegration(t *testing.T) {
-	// Resolve .env from the source file so GoLand's working directory does not matter.
-	_, testFile, _, _ := runtime.Caller(0)
-	envPath := filepath.Join(filepath.Dir(testFile), "..", "..", ".env")
-	values, err := godotenv.Read(envPath)
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		t.Fatal(err)
-	}
-	for key, value := range values {
-		if _, exists := os.LookupEnv(key); !exists {
-			t.Setenv(key, value)
-		}
-	}
-	cfg, err := config.Load()
-	if err != nil {
-		t.Fatal(err)
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	db, err := postgres.Open(ctx, cfg.Postgres.ConnectionString())
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { db.Close() })
-
-	var result int
-	if err := db.QueryRowContext(ctx, "SELECT 1").Scan(&result); err != nil {
-		t.Fatal(err)
-	}
-	if result != 1 {
-		t.Errorf("SELECT 1 = %d, want 1", result)
-	}
-	if err := db.Close(); err != nil {
-		t.Fatal(err)
-	}
-	if err := db.PingContext(ctx); err == nil {
-		t.Error("expected error after closing pool")
 	}
 }
