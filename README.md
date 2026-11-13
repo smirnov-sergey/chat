@@ -72,7 +72,7 @@ go run ./cmd/chat
 
 SQL-миграции применяются отдельно: `go run ./cmd/migrate up`.
 Правила и проверка на тестовой базе — в
-[`migrations/README.md`](migrations/README.md). Прикладных миграций пока нет.
+[`migrations/README.md`](migrations/README.md). Первая миграция создаёт таблицу `users`.
 
 Проверка в другом терминале:
 
