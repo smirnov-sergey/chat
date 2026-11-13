@@ -1,9 +1,12 @@
 package config
 
 import (
+	"fmt"
 	"net"
 	"net/url"
 	"os"
+	"strconv"
+	"strings"
 )
 
 type Config struct {
@@ -37,7 +40,7 @@ func Default() Config {
 	}
 }
 
-func Load() Config {
+func Load() (Config, error) {
 	cfg := Default()
 
 	if addr := os.Getenv("HTTP_ADDR"); addr != "" {
@@ -53,5 +56,36 @@ func Load() Config {
 		SSLMode:  os.Getenv("POSTGRES_SSLMODE"),
 	}
 
-	return cfg
+	if err := cfg.Postgres.validate(); err != nil {
+		return Config{}, err
+	}
+	return cfg, nil
+}
+
+func (cfg PostgresConfig) validate() error {
+	for _, field := range []struct{ name, value string }{
+		{"POSTGRES_HOST", cfg.Host},
+		{"POSTGRES_PORT", cfg.Port},
+		{"POSTGRES_DB", cfg.Database},
+		{"POSTGRES_USER", cfg.User},
+		{"POSTGRES_SSLMODE", cfg.SSLMode},
+	} {
+		if strings.TrimSpace(field.value) == "" {
+			return fmt.Errorf("%s is required", field.name)
+		}
+	}
+	if cfg.Password == "" {
+		return fmt.Errorf("POSTGRES_PASSWORD is required")
+	}
+	port, err := strconv.ParseUint(cfg.Port, 10, 16)
+	if err != nil || port == 0 {
+		return fmt.Errorf("POSTGRES_PORT must be an integer between 1 and 65535")
+	}
+
+	switch cfg.SSLMode {
+	case "disable", "allow", "prefer", "require", "verify-ca", "verify-full":
+		return nil
+	default:
+		return fmt.Errorf("POSTGRES_SSLMODE must be disable, allow, prefer, require, verify-ca or verify-full")
+	}
 }

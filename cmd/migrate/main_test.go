@@ -27,3 +27,12 @@ func TestRunRejectsMalformedDotEnv(t *testing.T) {
 		t.Fatalf("run error = %v, want .env loading error", err)
 	}
 }
+
+func TestRunRejectsMissingPostgresConfiguration(t *testing.T) {
+	t.Chdir(t.TempDir())
+	t.Setenv("POSTGRES_HOST", "")
+	err := run([]string{"up"})
+	if err == nil || !strings.Contains(err.Error(), "POSTGRES_HOST") {
+		t.Fatalf("run error = %v, want missing PostgreSQL host", err)
+	}
+}

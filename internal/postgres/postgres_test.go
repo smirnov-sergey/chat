@@ -80,7 +80,10 @@ func TestOpenIntegration(t *testing.T) {
 			t.Setenv(key, value)
 		}
 	}
-	cfg := config.Load()
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	db, err := postgres.Open(ctx, cfg.Postgres.ConnectionString())

@@ -9,6 +9,13 @@ import (
 )
 
 func TestRunConfigurationSources(t *testing.T) {
+	for key, value := range map[string]string{
+		"POSTGRES_HOST": "127.0.0.1", "POSTGRES_PORT": "5432",
+		"POSTGRES_DB": "chat", "POSTGRES_USER": "chat",
+		"POSTGRES_PASSWORD": "test_password", "POSTGRES_SSLMODE": "disable",
+	} {
+		t.Setenv(key, value)
+	}
 	// Invalid addresses make run return at net.Listen without starting a server.
 	tests := []struct {
 		name string
@@ -44,6 +51,15 @@ func TestRunConfigurationSources(t *testing.T) {
 				t.Errorf("listener address = %q, want %q", addrErr.Addr, tt.want)
 			}
 		})
+	}
+}
+
+func TestRunRejectsMissingPostgresConfiguration(t *testing.T) {
+	t.Chdir(t.TempDir())
+	t.Setenv("POSTGRES_HOST", "")
+	err := run()
+	if err == nil || !strings.Contains(err.Error(), "POSTGRES_HOST") {
+		t.Fatalf("run error = %v, want missing PostgreSQL host", err)
 	}
 }
 
