@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"chat/internal/config"
-	"chat/internal/httpapi"
 	"chat/internal/postgres"
+	"chat/internal/router"
 
 	"github.com/joho/godotenv"
 )
@@ -40,7 +40,7 @@ func run() error {
 
 	server := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           httpapi.NewRouter(),
+		Handler:           router.New(),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      10 * time.Second,

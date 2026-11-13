@@ -1,18 +1,18 @@
-package httpapi_test
+package router_test
 
 import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	"chat/internal/httpapi"
+	"chat/internal/router"
 )
 
 func TestHealth(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	rec := httptest.NewRecorder()
 
-	httpapi.NewRouter().ServeHTTP(rec, req)
+	router.New().ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
@@ -43,7 +43,7 @@ func TestRouterRejectsUnsupportedRequests(t *testing.T) {
 			req := httptest.NewRequest(tt.method, tt.path, nil)
 			rec := httptest.NewRecorder()
 
-			httpapi.NewRouter().ServeHTTP(rec, req)
+			router.New().ServeHTTP(rec, req)
 
 			if rec.Code != tt.status {
 				t.Errorf("status = %d, want %d", rec.Code, tt.status)
