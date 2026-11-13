@@ -82,7 +82,10 @@ Frontend
 
 ### Development
 
-@TODO
+Go-приложение и PostgreSQL запускаются через development Compose.
+Изменения Go-кода обновляются через Compose Watch. Приложение пока
+не подключается к базе. Настройка, запуск и проверки
+описаны в [docker/README.md](docker/README.md#development).
 
 ---
 

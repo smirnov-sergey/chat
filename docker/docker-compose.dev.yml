@@ -1,2 +1,45 @@
 name: chat-dev
 
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.dev
+    ports:
+      - "127.0.0.1:8080:8080"
+    env_file:
+      - ../.env
+    environment:
+      HTTP_ADDR: ":8080"
+    stop_grace_period: 15s
+    develop:
+      watch:
+        - action: rebuild
+          path: ..
+          ignore:
+            - .git/
+            - .idea/
+            - .env
+            - .env.*
+            - .env-*
+            - "*.exe"
+            - docs/
+            - README.md
+
+  postgres:
+    image: postgres:18.6-bookworm
+    env_file:
+      - ../.env
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+volumes:
+  postgres_data:
