@@ -75,7 +75,7 @@ func TestUsersPasswordMigration(t *testing.T) {
 			t.Fatalf("update error = %v, want PostgreSQL code 23514", err)
 		}
 	})
-	t.Run("new profile without password remains supported", func(t *testing.T) {
+	t.Run("omitted hash has no implicit default", func(t *testing.T) {
 		var hash sql.NullString
 		if err := db.QueryRowContext(ctx, `
 			INSERT INTO users (username, name, created_at, updated_at)

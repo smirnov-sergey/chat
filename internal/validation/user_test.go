@@ -81,3 +81,32 @@ func TestValidateName(t *testing.T) {
 		})
 	}
 }
+
+func TestValidatePassword(t *testing.T) {
+	for _, tt := range []struct {
+		name     string
+		password string
+		valid    bool
+	}{
+		{"minimum length", strings.Repeat("a", 15), true},
+		{"maximum Unicode length", strings.Repeat("Я", 128), true},
+		{"maximum emoji length", strings.Repeat("😀", 128), true},
+		{"spaces and case", "  LongPassword123!  ", true},
+		{"no character composition requirement", strings.Repeat("я", 15), true},
+		{"empty", "", false},
+		{"too short", strings.Repeat("Я", 14), false},
+		{"too long", strings.Repeat("a", 129), false},
+		{"invalid UTF-8", "long-password-\xff", false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validation.ValidatePassword(tt.password)
+			if tt.valid {
+				if err != nil {
+					t.Fatalf("ValidatePassword error = %v, want nil", err)
+				}
+			} else if !errors.Is(err, validation.ErrInvalidPassword) {
+				t.Fatalf("ValidatePassword error = %v, want ErrInvalidPassword", err)
+			}
+		})
+	}
+}

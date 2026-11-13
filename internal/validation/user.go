@@ -9,6 +9,7 @@ import (
 var (
 	ErrInvalidUsername = errors.New("username must contain 3 to 32 lowercase ASCII letters, digits or underscores")
 	ErrInvalidName     = errors.New("name must contain 1 to 80 Unicode code points without control characters or line breaks")
+	ErrInvalidPassword = errors.New("password must contain 15 to 128 Unicode code points")
 )
 
 func ValidateUsername(username string) error {
@@ -41,5 +42,16 @@ func ValidateName(name string) error {
 		}
 	}
 
+	return nil
+}
+
+func ValidatePassword(password string) error {
+	if !utf8.ValidString(password) {
+		return ErrInvalidPassword
+	}
+	length := utf8.RuneCountInString(password)
+	if length < 15 || length > 128 {
+		return ErrInvalidPassword
+	}
 	return nil
 }

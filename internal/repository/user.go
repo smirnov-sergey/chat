@@ -17,7 +17,7 @@ func NewUserRepository(db *sql.DB) *UserRepository {
 	return &UserRepository{db: db}
 }
 
-func (repo *UserRepository) Create(ctx context.Context, u *user.User) error {
+func (repo *UserRepository) Create(ctx context.Context, u *user.User, passwordHash string) error {
 	var id int64
 
 	err := repo.db.QueryRowContext(ctx, `
@@ -25,15 +25,17 @@ func (repo *UserRepository) Create(ctx context.Context, u *user.User) error {
 			username,
 			name,
 			created_at,
-			updated_at
+			updated_at,
+			password_hash
 		)
-		VALUES ($1, $2, $3, $4)
+		VALUES ($1, $2, $3, $4, $5)
 		ON CONFLICT (username) DO NOTHING
 		RETURNING id`,
 		u.Username,
 		u.Name,
 		u.CreatedAt,
 		u.UpdatedAt,
+		passwordHash,
 	).Scan(&id)
 
 	if errors.Is(err, sql.ErrNoRows) {
