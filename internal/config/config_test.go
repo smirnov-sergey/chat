@@ -1,11 +1,45 @@
 package config_test
 
 import (
+	"net/url"
 	"os"
 	"testing"
 
 	"chat/internal/config"
 )
+
+func TestLoadPostgres(t *testing.T) {
+	t.Setenv("POSTGRES_HOST", "127.0.0.1")
+	t.Setenv("POSTGRES_PORT", "5433")
+	t.Setenv("POSTGRES_DB", "chat")
+	t.Setenv("POSTGRES_USER", "chat_user")
+	t.Setenv("POSTGRES_PASSWORD", "test_password")
+	t.Setenv("POSTGRES_SSLMODE", "disable")
+	want := config.PostgresConfig{
+		Host: "127.0.0.1", Port: "5433", Database: "chat",
+		User: "chat_user", Password: "test_password", SSLMode: "disable",
+	}
+	if got := config.Load().Postgres; got != want {
+		t.Errorf("PostgreSQL configuration does not match environment")
+	}
+}
+
+func TestPostgresConnectionString(t *testing.T) {
+	cfg := config.PostgresConfig{
+		Host: "::1", Port: "5432", Database: "chat database",
+		User: "user@name", Password: "p@ss:/?#% word", SSLMode: "disable",
+	}
+	u, err := url.Parse(cfg.ConnectionString())
+	if err != nil {
+		t.Fatal(err)
+	}
+	password, _ := u.User.Password()
+	if u.Scheme != "postgres" || u.Hostname() != cfg.Host || u.Port() != cfg.Port ||
+		u.Path != "/"+cfg.Database || u.User.Username() != cfg.User ||
+		password != cfg.Password || u.Query().Get("sslmode") != cfg.SSLMode {
+		t.Error("connection string did not preserve configuration")
+	}
+}
 
 func TestDefaultIgnoresEnvironment(t *testing.T) {
 	t.Setenv("HTTP_ADDR", "127.0.0.1:9090")

@@ -14,6 +14,7 @@ import (
 
 	"chat/internal/config"
 	"chat/internal/httpapi"
+	"chat/internal/postgres"
 
 	"github.com/joho/godotenv"
 )
@@ -47,6 +48,17 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("listen: %w", err)
 	}
+	defer listener.Close()
+
+	connectCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	db, err := postgres.Open(connectCtx, cfg.Postgres.ConnectionString())
+	cancel()
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	log.Print("PostgreSQL connected")
 
 	log.Printf("HTTP server listening on %s", listener.Addr())
 

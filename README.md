@@ -57,8 +57,13 @@ Backend:
 Требуется Go 1.26.9 или новее. Из корня репозитория:
 
 ```powershell
+docker compose --env-file .env -f docker/docker-compose.dev.yml up -d --wait postgres
 go run ./cmd/chat
 ```
+
+Параметры PostgreSQL задаются в `.env`:
+см. [настройку базы](docker/README.md#база-данных).
+Перед запуском HTTP сервер проверяет связь с базой с таймаутом 5 секунд.
 
 Проверка в другом терминале:
 
@@ -83,8 +88,8 @@ Frontend
 ### Development
 
 Go-приложение и PostgreSQL запускаются через development Compose.
-Изменения Go-кода обновляются через Compose Watch. Приложение пока
-не подключается к базе. Настройка, запуск и проверки
+Изменения Go-кода обновляются через Compose Watch. Приложение
+подключается к базе при запуске. Настройка, запуск и проверки
 описаны в [docker/README.md](docker/README.md#development).
 
 ---
