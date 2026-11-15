@@ -3,6 +3,7 @@ package password_test
 import (
 	"bytes"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -55,5 +56,74 @@ func TestArgon2idHash(t *testing.T) {
 	otherParts := strings.Split(other, "$")
 	if len(otherParts) != 6 || otherParts[4] == parts[4] || otherParts[5] == parts[5] {
 		t.Fatal("repeated hashing of the same password must use a new salt and produce a different key")
+	}
+}
+
+func TestArgon2idVerify(t *testing.T) {
+	const original = "  My Passphrase ПРИВЕТ 😀  "
+	hasher := password.Argon2id{}
+	encoded, err := hasher.Hash(original)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tt := range []struct {
+		name     string
+		password string
+		matches  bool
+	}{
+		{"correct password", original, true},
+		{"wrong password", "another passphrase", false},
+		{"empty password", "", false},
+		{"trimmed password", strings.TrimSpace(original), false},
+		{"changed case", strings.ToLower(original), false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			matches, err := hasher.Verify(tt.password, encoded)
+			if err != nil || matches != tt.matches {
+				t.Fatalf("Verify = (%v, %v), want (%v, nil)", matches, err, tt.matches)
+			}
+		})
+	}
+}
+
+func TestArgon2idVerifyRejectsInvalidHash(t *testing.T) {
+	hasher := password.Argon2id{}
+	encoded, err := hasher.Hash("test passphrase")
+	if err != nil {
+		t.Fatal(err)
+	}
+	replacePart := func(index int, value string) string {
+		parts := strings.Split(encoded, "$")
+		parts[index] = value
+		return strings.Join(parts, "$")
+	}
+	lastSeparator := strings.LastIndex(encoded, "$")
+	for _, tt := range []struct {
+		name string
+		hash string
+	}{
+		{"empty", ""},
+		{"plain text", "not a password hash"},
+		{"oversized", strings.Repeat("x", 4096)},
+		{"unsupported algorithm", replacePart(1, "argon2ix")},
+		{"unsupported version", replacePart(2, "v=16")},
+		{"unsupported memory", replacePart(3, "m=19457,t=2,p=1")},
+		{"excessive memory", replacePart(3, "m=4294967295,t=2,p=1")},
+		{"unsupported iterations", replacePart(3, "m=19456,t=3,p=1")},
+		{"unsupported parallelism", replacePart(3, "m=19456,t=2,p=2")},
+		{"missing separator", encoded[:lastSeparator] + "." + encoded[lastSeparator+1:]},
+		{"invalid salt encoding", replacePart(4, strings.Repeat("!", 22))},
+		{"invalid key encoding", replacePart(5, strings.Repeat("!", 43))},
+		{"invalid salt length", "$argon2id$v=19$m=19456,t=2,p=1$" +
+			base64.RawStdEncoding.EncodeToString(make([]byte, 17)) + "$" +
+			base64.RawStdEncoding.EncodeToString(make([]byte, 31))},
+		{"trailing data", encoded + "$extra"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			matches, err := hasher.Verify("test passphrase", tt.hash)
+			if matches || !errors.Is(err, password.ErrInvalidHash) {
+				t.Fatalf("Verify = (%v, %v), want (false, ErrInvalidHash)", matches, err)
+			}
+		})
 	}
 }
