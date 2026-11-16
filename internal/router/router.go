@@ -6,9 +6,12 @@ import (
 	"chat/internal/handlers"
 )
 
-func New() *http.ServeMux {
+func New(registration *handlers.UserRegistrationHandler) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", handlers.Health)
+	mux.HandleFunc("POST /auth/register", registration.Register)
 
-	return mux
+	protection := http.NewCrossOriginProtection()
+	protection.SetDenyHandler(http.HandlerFunc(handlers.CrossOriginDenied))
+	return protection.Handler(mux)
 }

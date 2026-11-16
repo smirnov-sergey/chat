@@ -10,8 +10,9 @@ import (
 )
 
 type Config struct {
-	HTTPAddr string
-	Postgres PostgresConfig
+	HTTPAddr            string
+	SessionCookieSecure bool
+	Postgres            PostgresConfig
 }
 
 type PostgresConfig struct {
@@ -36,7 +37,8 @@ func (cfg PostgresConfig) ConnectionString() string {
 
 func Default() Config {
 	return Config{
-		HTTPAddr: "127.0.0.1:8080",
+		HTTPAddr:            "127.0.0.1:8080",
+		SessionCookieSecure: true,
 	}
 }
 
@@ -45,6 +47,13 @@ func Load() (Config, error) {
 
 	if addr := os.Getenv("HTTP_ADDR"); addr != "" {
 		cfg.HTTPAddr = addr
+	}
+	if sessionCookieSecureValue := os.Getenv("SESSION_COOKIE_SECURE"); sessionCookieSecureValue != "" {
+		secure, err := strconv.ParseBool(sessionCookieSecureValue)
+		if err != nil {
+			return Config{}, fmt.Errorf("SESSION_COOKIE_SECURE must be a valid boolean")
+		}
+		cfg.SessionCookieSecure = secure
 	}
 
 	cfg.Postgres = PostgresConfig{

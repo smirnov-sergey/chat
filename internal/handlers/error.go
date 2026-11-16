@@ -9,10 +9,19 @@ import (
 	"chat/internal/validation"
 )
 
-var errInternalServer = errors.New("internal server error")
+var (
+	errInternalServer     = errors.New("internal server error")
+	errCrossOriginRequest = errors.New("cross-origin request blocked")
+)
+
+func CrossOriginDenied(w http.ResponseWriter, _ *http.Request) {
+	handleError(w, errCrossOriginRequest)
+}
 
 func handleError(w http.ResponseWriter, err error) {
 	switch {
+	case errors.Is(err, errCrossOriginRequest):
+		writeError(w, http.StatusForbidden, errCrossOriginRequest)
 	case errors.Is(err, errInvalidRequestBody):
 		writeError(w, http.StatusBadRequest, errInvalidRequestBody)
 	case errors.Is(err, errRequestBodyTooLarge):

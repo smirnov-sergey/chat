@@ -48,8 +48,40 @@ func TestPostgresConnectionString(t *testing.T) {
 
 func TestDefaultIgnoresEnvironment(t *testing.T) {
 	t.Setenv("HTTP_ADDR", "127.0.0.1:9090")
+	t.Setenv("SESSION_COOKIE_SECURE", "false")
 	if got := config.Default().HTTPAddr; got != "127.0.0.1:8080" {
 		t.Errorf("HTTPAddr = %q, want 127.0.0.1:8080", got)
+	}
+	if !config.Default().SessionCookieSecure {
+		t.Error("default session cookie must be Secure regardless of environment")
+	}
+}
+
+func TestLoadSessionCookieSecure(t *testing.T) {
+	for _, tt := range []struct {
+		value  string
+		secure bool
+		valid  bool
+	}{
+		{"", true, true},
+		{"true", true, true},
+		{"false", false, true},
+		{"invalid", false, false},
+	} {
+		t.Run(tt.value, func(t *testing.T) {
+			setPostgresEnvironment(t)
+			t.Setenv("SESSION_COOKIE_SECURE", tt.value)
+			cfg, err := config.Load()
+			if !tt.valid {
+				if err == nil || !strings.Contains(err.Error(), "SESSION_COOKIE_SECURE") {
+					t.Fatalf("Load error = %v, want SESSION_COOKIE_SECURE validation error", err)
+				}
+				return
+			}
+			if err != nil || cfg.SessionCookieSecure != tt.secure {
+				t.Fatalf("Load cookie Secure = %v, error = %v; want %v, nil", cfg.SessionCookieSecure, err, tt.secure)
+			}
+		})
 	}
 }
 

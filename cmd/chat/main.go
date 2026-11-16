@@ -13,8 +13,12 @@ import (
 	"time"
 
 	"chat/internal/config"
+	"chat/internal/handlers"
+	"chat/internal/password"
 	"chat/internal/postgres"
+	"chat/internal/repository"
 	"chat/internal/router"
+	"chat/internal/service"
 
 	"github.com/joho/godotenv"
 )
@@ -40,7 +44,6 @@ func run() error {
 
 	server := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           router.New(),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      10 * time.Second,
@@ -60,6 +63,13 @@ func run() error {
 		return err
 	}
 	defer db.Close()
+
+	userRegistrationService, err := service.NewUserRegistrationService(repository.NewUserRegistrationStore(db), password.Argon2id{}, 7*24*time.Hour)
+	if err != nil {
+		return fmt.Errorf("create user registration service: %w", err)
+	}
+
+	server.Handler = router.New(handlers.NewUserRegistrationHandler(userRegistrationService, cfg.SessionCookieSecure))
 
 	log.Print("PostgreSQL connected")
 
