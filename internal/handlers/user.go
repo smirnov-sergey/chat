@@ -3,8 +3,11 @@ package handlers
 import (
 	"context"
 	"net/http"
+	"strconv"
 
 	"chat/internal/dto"
+	"chat/internal/model/session"
+	"chat/internal/model/user"
 	"chat/internal/service"
 )
 
@@ -16,6 +19,7 @@ const (
 type UserService interface {
 	Register(ctx context.Context, username, name, password string) (*service.UserSession, error)
 	Login(ctx context.Context, username, password string) (*service.UserSession, error)
+	GetByID(ctx context.Context, id int64) (*user.User, error)
 }
 
 type UserHandler struct {
@@ -75,4 +79,41 @@ func (h *UserHandler) Login(w http.ResponseWriter, r *http.Request) {
 	setSessionCookie(w, result.Token, h.secureCookies)
 
 	writeJSON(w, http.StatusOK, dto.ToUserResponse(result.User))
+}
+
+func (h *UserHandler) GetByID(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+
+	id, err := parseUserID(r)
+	if err != nil {
+		handleError(w, err)
+		return
+	}
+
+	currentUserID, ok := userIDFromContext(r.Context())
+	if !ok {
+		handleError(w, session.ErrInvalid)
+		return
+	}
+
+	if currentUserID != id {
+		handleError(w, errAccessDenied)
+		return
+	}
+
+	u, err := h.userService.GetByID(r.Context(), id)
+	if err != nil {
+		handleError(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, dto.ToUserResponse(u))
+}
+
+func parseUserID(r *http.Request) (int64, error) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil || id <= 0 {
+		return 0, errInvalidUserID
+	}
+	return id, nil
 }

@@ -54,7 +54,11 @@ func TestUserLoginHTTP(t *testing.T) {
 		VALUES ('legacy', 'Без пароля', $1, $1)`, time.Now().UTC()); err != nil {
 		t.Fatal(err)
 	}
-	h := router.New(handlers.NewUserHandler(users, false))
+	userHandler := handlers.NewUserHandler(users, false)
+	appRouter := router.New(userHandler)
+	crossOriginProtectionMiddleware := handlers.CrossOriginProtectionMiddleware()
+	sessionMiddleware := handlers.SessionMiddleware(sessions)
+	h := crossOriginProtectionMiddleware(sessionMiddleware(appRouter))
 	login := func(t *testing.T, username, password string) *httptest.ResponseRecorder {
 		t.Helper()
 		data, err := json.Marshal(dto.UserLoginRequest{Username: username, Password: password})

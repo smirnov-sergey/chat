@@ -13,14 +13,26 @@ type SessionAuthenticator interface {
 
 type userIDContextKey struct{}
 
+func CrossOriginProtectionMiddleware() func(http.Handler) http.Handler {
+	protection := http.NewCrossOriginProtection()
+	protection.SetDenyHandler(http.HandlerFunc(crossOriginDenied))
+	return protection.Handler
+}
+
 func userIDFromContext(ctx context.Context) (int64, bool) {
 	id, ok := ctx.Value(userIDContextKey{}).(int64)
 	return id, ok
 }
 
-func RequireSession(sessionAuthenticator SessionAuthenticator) func(http.Handler) http.Handler {
+func SessionMiddleware(sessionAuthenticator SessionAuthenticator) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			switch r.URL.Path {
+			case "/health", "/auth/register", "/auth/login":
+				next.ServeHTTP(w, r)
+				return
+			}
+
 			w.Header().Set("Cache-Control", "no-store")
 			cookie, err := r.Cookie(sessionCookieName)
 

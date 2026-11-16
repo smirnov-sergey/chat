@@ -15,6 +15,7 @@ import (
 
 type UserRepository interface {
 	GetByUsername(ctx context.Context, username string) (*user.User, error)
+	GetByID(ctx context.Context, id int64) (*user.User, error)
 }
 
 type UserRegistrationStore interface {
@@ -158,4 +159,17 @@ func (s *UserService) Login(ctx context.Context, username, password string) (*Us
 	}
 
 	return &UserSession{User: u, Token: token}, nil
+}
+
+func (s *UserService) GetByID(ctx context.Context, id int64) (*user.User, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	u, err := s.repository.GetByID(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("get user by ID: %w", err)
+	}
+
+	return u, nil
 }

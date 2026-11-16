@@ -14,10 +14,17 @@ import (
 	"chat/internal/service"
 )
 
-type fakeUserRepository func(context.Context, string) (*user.User, error)
+type fakeUserRepository struct {
+	getByUsername func(context.Context, string) (*user.User, error)
+	getByID       func(context.Context, int64) (*user.User, error)
+}
 
 func (fake fakeUserRepository) GetByUsername(ctx context.Context, username string) (*user.User, error) {
-	return fake(ctx, username)
+	return fake.getByUsername(ctx, username)
+}
+
+func (fake fakeUserRepository) GetByID(ctx context.Context, id int64) (*user.User, error) {
+	return fake.getByID(ctx, id)
 }
 
 type fakePasswordVerifier func(string, string) (bool, error)
@@ -29,7 +36,7 @@ func (fake fakeSessionCreator) Create(ctx context.Context, userID int64) (*sessi
 }
 
 var (
-	_ service.UserRepository = fakeUserRepository(nil)
+	_ service.UserRepository = fakeUserRepository{}
 	_ service.UserRepository = (*repository.UserRepository)(nil)
 	_ service.SessionCreator = fakeSessionCreator(nil)
 	_ service.SessionCreator = (*service.SessionService)(nil)
@@ -52,13 +59,13 @@ func TestUserServiceLogin(t *testing.T) {
 			u := &user.User{ID: 42, Username: "ivan", PasswordHash: testPasswordHash}
 			token := &session.Token{Value: "session-token", ExpiresAt: time.Now().Add(7 * 24 * time.Hour)}
 			var calls []string
-			repo := fakeUserRepository(func(gotCtx context.Context, gotUsername string) (*user.User, error) {
+			repo := fakeUserRepository{getByUsername: func(gotCtx context.Context, gotUsername string) (*user.User, error) {
 				if gotCtx != ctx || gotUsername != "ivan" {
 					t.Fatal("lookup must receive the caller's context and normalized username")
 				}
 				calls = append(calls, "lookup")
 				return u, nil
-			})
+			}}
 			verifier := fakePasswordVerifier(func(gotPassword, hash string) (bool, error) {
 				if gotPassword != tt.password || hash != u.PasswordHash {
 					t.Fatal("verification must receive the unchanged password and stored hash")
@@ -114,13 +121,13 @@ func TestUserServiceLoginFailures(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			var calls []string
-			repo := fakeUserRepository(func(context.Context, string) (*user.User, error) {
+			repo := fakeUserRepository{getByUsername: func(context.Context, string) (*user.User, error) {
 				calls = append(calls, "lookup")
 				if tt.lookupError != nil {
 					return nil, tt.lookupError
 				}
 				return &user.User{ID: 42, PasswordHash: tt.hash}, nil
-			})
+			}}
 			verifier := fakePasswordVerifier(func(string, string) (bool, error) {
 				calls = append(calls, "verify")
 				return tt.matches, tt.verificationError
@@ -149,13 +156,13 @@ func TestUserServiceLoginCancellation(t *testing.T) {
 			if stage == "before lookup" {
 				cancel()
 			}
-			repo := fakeUserRepository(func(context.Context, string) (*user.User, error) {
+			repo := fakeUserRepository{getByUsername: func(context.Context, string) (*user.User, error) {
 				calls = append(calls, "lookup")
 				if stage == "during lookup" {
 					cancel()
 				}
 				return &user.User{ID: 42, PasswordHash: testPasswordHash}, nil
-			})
+			}}
 			verifier := fakePasswordVerifier(func(string, string) (bool, error) {
 				calls = append(calls, "verify")
 				cancel()

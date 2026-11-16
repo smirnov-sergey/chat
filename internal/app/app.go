@@ -55,7 +55,16 @@ func Run(ctx context.Context, cfg config.Config) error {
 	}
 
 	userHandler := handlers.NewUserHandler(userService, cfg.SessionCookieSecure)
-	server.Handler = router.New(userHandler)
+
+	appRouter := router.New(userHandler)
+
+	crossOriginProtectionMiddleware := handlers.CrossOriginProtectionMiddleware()
+	sessionMiddleware := handlers.SessionMiddleware(sessionService)
+	newHandler := crossOriginProtectionMiddleware(
+		sessionMiddleware(appRouter),
+	)
+
+	server.Handler = newHandler
 
 	log.Print("PostgreSQL connected")
 	log.Printf("HTTP server listening on %s", listener.Addr())

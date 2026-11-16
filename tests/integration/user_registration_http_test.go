@@ -47,7 +47,11 @@ func TestUserRegistrationHTTP(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	h := router.New(handlers.NewUserHandler(users, false))
+	userHandler := handlers.NewUserHandler(users, false)
+	appRouter := router.New(userHandler)
+	crossOriginProtectionMiddleware := handlers.CrossOriginProtectionMiddleware()
+	sessionMiddleware := handlers.SessionMiddleware(sessions)
+	h := crossOriginProtectionMiddleware(sessionMiddleware(appRouter))
 	const body = `{"username":" IVAN ","name":" Иван Петров ","password":"long personal password"}`
 	register := func() *httptest.ResponseRecorder {
 		req := httptest.NewRequest(http.MethodPost, "/auth/register", strings.NewReader(body)).WithContext(ctx)

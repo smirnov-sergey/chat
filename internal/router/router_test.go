@@ -2,7 +2,6 @@ package router_test
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -17,8 +16,13 @@ import (
 )
 
 type fakeUserService struct {
+	getByID  func(context.Context, int64) (*user.User, error)
 	register func(context.Context, string, string, string) (*service.UserSession, error)
 	login    func(context.Context, string, string) (*service.UserSession, error)
+}
+
+func (fake fakeUserService) GetByID(ctx context.Context, id int64) (*user.User, error) {
+	return fake.getByID(ctx, id)
 }
 
 func (fake fakeUserService) Register(ctx context.Context, username, name, password string) (*service.UserSession, error) {
@@ -70,6 +74,7 @@ func TestRouterRejectsUnsupportedRequests(t *testing.T) {
 		status int
 	}{
 		{"unknown path", http.MethodGet, "/missing", http.StatusNotFound},
+		{"old profile path", http.MethodGet, "/me", http.StatusNotFound},
 		{"unsupported method", http.MethodPost, "/health", http.StatusMethodNotAllowed},
 		{"registration requires POST", http.MethodGet, "/auth/register", http.StatusMethodNotAllowed},
 		{"login requires POST", http.MethodGet, "/auth/login", http.StatusMethodNotAllowed},
@@ -146,31 +151,11 @@ func TestLoginRoute(t *testing.T) {
 	}
 }
 
-func TestAuthRoutesRejectCrossOrigin(t *testing.T) {
-	for _, path := range []string{"/auth/register", "/auth/login"} {
-		t.Run(path, func(t *testing.T) {
-			for _, headers := range []map[string]string{
-				{"Origin": "https://evil.example"},
-				{"Origin": "null"},
-				{"Sec-Fetch-Site": "cross-site"},
-			} {
-				req := httptest.NewRequest(http.MethodPost, "http://chat.local"+path, strings.NewReader(`{}`))
-				req.Header.Set("Content-Type", "application/json")
-				for name, value := range headers {
-					req.Header.Set(name, value)
-				}
-				rec := httptest.NewRecorder()
-				newRouter(t).ServeHTTP(rec, req)
-				if rec.Code != http.StatusForbidden || rec.Header().Get("Content-Type") != "application/json" || rec.Header().Get("Set-Cookie") != "" {
-					t.Fatalf("cross-origin response status = %d, headers = %v; want JSON 403 without cookie", rec.Code, rec.Header())
-				}
-				var body struct {
-					Error string `json:"error"`
-				}
-				if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil || body.Error != "cross-origin request blocked" {
-					t.Fatalf("unexpected rejection body: %q", rec.Body.String())
-				}
-			}
-		})
+func TestUserProfileRouteRequiresVerifiedIdentity(t *testing.T) {
+	h := router.New(handlers.NewUserHandler(fakeUserService{}, true))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/users/42", nil))
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401 from the profile handler without a verified identity", rec.Code)
 	}
 }

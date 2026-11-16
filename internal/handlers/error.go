@@ -13,14 +13,22 @@ import (
 var (
 	errInternalServer     = errors.New("internal server error")
 	errCrossOriginRequest = errors.New("cross-origin request blocked")
+	errInvalidUserID      = errors.New("invalid user ID")
+	errAccessDenied       = errors.New("access denied")
 )
 
-func CrossOriginDenied(w http.ResponseWriter, _ *http.Request) {
+func crossOriginDenied(w http.ResponseWriter, _ *http.Request) {
 	handleError(w, errCrossOriginRequest)
 }
 
 func handleError(w http.ResponseWriter, err error) {
 	switch {
+	case errors.Is(err, user.ErrNotFound):
+		writeError(w, http.StatusNotFound, user.ErrNotFound)
+	case errors.Is(err, errInvalidUserID):
+		writeError(w, http.StatusBadRequest, errInvalidUserID)
+	case errors.Is(err, errAccessDenied):
+		writeError(w, http.StatusForbidden, errAccessDenied)
 	case errors.Is(err, errCrossOriginRequest):
 		writeError(w, http.StatusForbidden, errCrossOriginRequest)
 	case errors.Is(err, errInvalidRequestBody):
