@@ -16,15 +16,15 @@ import (
 	"chat/internal/service"
 )
 
-type fakeUserRegistrationService func(context.Context, string, string, string) (*service.UserRegistration, error)
+type fakeUserRegistrationService func(context.Context, string, string, string) (*service.UserSession, error)
 
-func (fake fakeUserRegistrationService) Register(ctx context.Context, username, name, password string) (*service.UserRegistration, error) {
+func (fake fakeUserRegistrationService) Register(ctx context.Context, username, name, password string) (*service.UserSession, error) {
 	return fake(ctx, username, name, password)
 }
 
 func newRouter(t *testing.T) http.Handler {
 	t.Helper()
-	registration := fakeUserRegistrationService(func(context.Context, string, string, string) (*service.UserRegistration, error) {
+	registration := fakeUserRegistrationService(func(context.Context, string, string, string) (*service.UserSession, error) {
 		t.Fatal("registration must not be called for this request")
 		return nil, nil
 	})
@@ -80,9 +80,9 @@ func TestRegistrationRoute(t *testing.T) {
 	for _, origin := range []string{"", "http://chat.local"} {
 		t.Run(origin, func(t *testing.T) {
 			calls := 0
-			registration := fakeUserRegistrationService(func(context.Context, string, string, string) (*service.UserRegistration, error) {
+			registration := fakeUserRegistrationService(func(context.Context, string, string, string) (*service.UserSession, error) {
 				calls++
-				return &service.UserRegistration{
+				return &service.UserSession{
 					User:  &user.User{ID: 42, Username: "ivan", Name: "Иван"},
 					Token: &session.Token{Value: "test-token", ExpiresAt: time.Now().Add(time.Hour)},
 				}, nil

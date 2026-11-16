@@ -14,7 +14,7 @@ const (
 )
 
 type UserRegistrationService interface {
-	Register(ctx context.Context, username, name, password string) (*service.UserRegistration, error)
+	Register(ctx context.Context, username, name, password string) (*service.UserSession, error)
 }
 
 type UserRegistrationHandler struct {

@@ -10,22 +10,17 @@ import (
 
 	"chat/internal/model/session"
 	"chat/internal/model/user"
-	"chat/internal/password"
 	"chat/internal/repository"
 	"chat/internal/service"
 )
 
-type fakeUserLoginRepository func(context.Context, string) (*user.User, error)
+type fakeUserRepository func(context.Context, string) (*user.User, error)
 
-func (fake fakeUserLoginRepository) GetByUsername(ctx context.Context, username string) (*user.User, error) {
+func (fake fakeUserRepository) GetByUsername(ctx context.Context, username string) (*user.User, error) {
 	return fake(ctx, username)
 }
 
 type fakePasswordVerifier func(string, string) (bool, error)
-
-func (fake fakePasswordVerifier) Verify(password, encoded string) (bool, error) {
-	return fake(password, encoded)
-}
 
 type fakeSessionCreator func(context.Context, int64) (*session.Token, error)
 
@@ -34,15 +29,13 @@ func (fake fakeSessionCreator) Create(ctx context.Context, userID int64) (*sessi
 }
 
 var (
-	_ service.UserLoginRepository = fakeUserLoginRepository(nil)
-	_ service.UserLoginRepository = (*repository.UserRepository)(nil)
-	_ service.PasswordVerifier    = fakePasswordVerifier(nil)
-	_ service.PasswordVerifier    = password.Argon2id{}
-	_ service.SessionCreator      = fakeSessionCreator(nil)
-	_ service.SessionCreator      = (*service.SessionService)(nil)
+	_ service.UserRepository = fakeUserRepository(nil)
+	_ service.UserRepository = (*repository.UserRepository)(nil)
+	_ service.SessionCreator = fakeSessionCreator(nil)
+	_ service.SessionCreator = (*service.SessionService)(nil)
 )
 
-func TestUserLoginServiceLogin(t *testing.T) {
+func TestUserServiceLogin(t *testing.T) {
 	for _, tt := range []struct {
 		name     string
 		username string
@@ -59,7 +52,7 @@ func TestUserLoginServiceLogin(t *testing.T) {
 			u := &user.User{ID: 42, Username: "ivan", PasswordHash: testPasswordHash}
 			token := &session.Token{Value: "session-token", ExpiresAt: time.Now().Add(7 * 24 * time.Hour)}
 			var calls []string
-			repo := fakeUserLoginRepository(func(gotCtx context.Context, gotUsername string) (*user.User, error) {
+			repo := fakeUserRepository(func(gotCtx context.Context, gotUsername string) (*user.User, error) {
 				if gotCtx != ctx || gotUsername != "ivan" {
 					t.Fatal("lookup must receive the caller's context and normalized username")
 				}
@@ -80,7 +73,7 @@ func TestUserLoginServiceLogin(t *testing.T) {
 				calls = append(calls, "session")
 				return token, nil
 			})
-			got, err := service.NewUserLoginService(repo, verifier, sessions).Login(ctx, tt.username, tt.password)
+			got, err := newLoginUserService(t, repo, verifier, sessions).Login(ctx, tt.username, tt.password)
 			if err != nil || got == nil || got.User != u || got.Token != token {
 				t.Fatalf("Login error = %v; want the authenticated user and created token", err)
 			}
@@ -91,7 +84,7 @@ func TestUserLoginServiceLogin(t *testing.T) {
 	}
 }
 
-func TestUserLoginServiceFailures(t *testing.T) {
+func TestUserServiceLoginFailures(t *testing.T) {
 	lookupError := errors.New("database unavailable")
 	verificationError := errors.New("unsupported hash")
 	sessionError := errors.New("session insert failed")
@@ -121,7 +114,7 @@ func TestUserLoginServiceFailures(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			var calls []string
-			repo := fakeUserLoginRepository(func(context.Context, string) (*user.User, error) {
+			repo := fakeUserRepository(func(context.Context, string) (*user.User, error) {
 				calls = append(calls, "lookup")
 				if tt.lookupError != nil {
 					return nil, tt.lookupError
@@ -136,7 +129,7 @@ func TestUserLoginServiceFailures(t *testing.T) {
 				calls = append(calls, "session")
 				return nil, tt.sessionError
 			})
-			got, err := service.NewUserLoginService(repo, verifier, sessions).Login(t.Context(), tt.username, tt.password)
+			got, err := newLoginUserService(t, repo, verifier, sessions).Login(t.Context(), tt.username, tt.password)
 			if got != nil || !errors.Is(err, tt.want) {
 				t.Fatalf("Login error = %v, want nil result and %v", err, tt.want)
 			}
@@ -147,7 +140,7 @@ func TestUserLoginServiceFailures(t *testing.T) {
 	}
 }
 
-func TestUserLoginServiceCancellation(t *testing.T) {
+func TestUserServiceLoginCancellation(t *testing.T) {
 	for _, stage := range []string{"before lookup", "during lookup", "during verification"} {
 		t.Run(stage, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(t.Context())
@@ -156,7 +149,7 @@ func TestUserLoginServiceCancellation(t *testing.T) {
 			if stage == "before lookup" {
 				cancel()
 			}
-			repo := fakeUserLoginRepository(func(context.Context, string) (*user.User, error) {
+			repo := fakeUserRepository(func(context.Context, string) (*user.User, error) {
 				calls = append(calls, "lookup")
 				if stage == "during lookup" {
 					cancel()
@@ -172,7 +165,7 @@ func TestUserLoginServiceCancellation(t *testing.T) {
 				t.Fatal("canceled login must not create a session")
 				return nil, nil
 			})
-			got, err := service.NewUserLoginService(repo, verifier, sessions).Login(ctx, "ivan", testPassword)
+			got, err := newLoginUserService(t, repo, verifier, sessions).Login(ctx, "ivan", testPassword)
 			if got != nil || !errors.Is(err, context.Canceled) {
 				t.Fatalf("Login error = %v, want nil result and context.Canceled", err)
 			}
@@ -182,4 +175,13 @@ func TestUserLoginServiceCancellation(t *testing.T) {
 			}
 		})
 	}
+}
+
+func newLoginUserService(t *testing.T, repo fakeUserRepository, verifier fakePasswordVerifier, sessions fakeSessionCreator) *service.UserService {
+	t.Helper()
+	s, err := service.NewUserService(repo, nil, fakePasswordService{verify: verifier}, sessions, 7*24*time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return s
 }

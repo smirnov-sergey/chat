@@ -27,29 +27,40 @@ func (store fakeUserRegistrationStore) Create(ctx context.Context, u *user.User,
 
 var _ service.UserRegistrationStore = fakeUserRegistrationStore{}
 
-func newUserRegistrationService(t *testing.T, store fakeUserRegistrationStore, hasher service.PasswordHasher) *service.UserRegistrationService {
+func newRegistrationUserService(t *testing.T, store fakeUserRegistrationStore, hasher fakePasswordHasher) *service.UserService {
 	t.Helper()
-	s, err := service.NewUserRegistrationService(store, hasher, 7*24*time.Hour)
+	s, err := service.NewUserService(nil, store, fakePasswordService{hash: hasher}, nil, 7*24*time.Hour)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return s
 }
 
-func TestNewUserRegistrationServiceRejectsInvalidLifetime(t *testing.T) {
+func TestNewUserServiceRejectsInvalidLifetime(t *testing.T) {
 	for _, lifetime := range []time.Duration{0, -time.Second} {
-		s, err := service.NewUserRegistrationService(fakeUserRegistrationStore{}, fakePasswordHasher(fixedPasswordHash), lifetime)
+		s, err := service.NewUserService(nil, fakeUserRegistrationStore{}, fakePasswordService{hash: fixedPasswordHash}, nil, lifetime)
 		if s != nil || err == nil {
-			t.Fatalf("NewUserRegistrationService(%v) = (%v, %v), want (nil, error)", lifetime, s, err)
+			t.Fatalf("NewUserService(%v) = (%v, %v), want (nil, error)", lifetime, s, err)
 		}
 	}
 }
 
-type fakePasswordHasher func(string) (string, error)
-
-func (hasher fakePasswordHasher) Hash(password string) (string, error) {
-	return hasher(password)
+type fakePasswordService struct {
+	hash   func(string) (string, error)
+	verify func(string, string) (bool, error)
 }
+
+func (fake fakePasswordService) Hash(password string) (string, error) {
+	return fake.hash(password)
+}
+
+func (fake fakePasswordService) Verify(password, encoded string) (bool, error) {
+	return fake.verify(password, encoded)
+}
+
+var _ service.PasswordService = fakePasswordService{}
+
+type fakePasswordHasher func(string) (string, error)
 
 const testPassword = "  LongPassword123!  "
 const testPasswordHash = "test-password-hash"
@@ -66,7 +77,7 @@ func unexpectedPasswordHasher(t *testing.T) fakePasswordHasher {
 	}
 }
 
-func TestUserRegistrationServiceRegister(t *testing.T) {
+func TestUserServiceRegister(t *testing.T) {
 	for _, tt := range []struct {
 		name        string
 		input       string
@@ -123,7 +134,7 @@ func TestUserRegistrationServiceRegister(t *testing.T) {
 				savedSession = initialSession
 				return nil
 			}}
-			got, err := newUserRegistrationService(t, repo, hasher).Register(ctx, tt.input, tt.inputName, testPassword)
+			got, err := newRegistrationUserService(t, repo, hasher).Register(ctx, tt.input, tt.inputName, testPassword)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -142,14 +153,14 @@ func TestUserRegistrationServiceRegister(t *testing.T) {
 	}
 }
 
-func TestUserRegistrationServiceRegisterRejectsInvalidUsername(t *testing.T) {
+func TestUserServiceRegisterRejectsInvalidUsername(t *testing.T) {
 	for _, input := range []string{"", " \t\n", "AB", strings.Repeat("A", 33), "иван", "iv an", "iv-an", "ivan😀", "iv\x00an", "iv\xffan"} {
 		t.Run(fmt.Sprintf("%q", input), func(t *testing.T) {
 			repo := fakeUserRegistrationStore{create: func(context.Context, *user.User, *session.Session) error {
 				t.Fatal("store must not be called for invalid input")
 				return nil
 			}}
-			got, err := newUserRegistrationService(t, repo, unexpectedPasswordHasher(t)).Register(context.Background(), input, "Иван", testPassword)
+			got, err := newRegistrationUserService(t, repo, unexpectedPasswordHasher(t)).Register(context.Background(), input, "Иван", testPassword)
 			if got != nil || !errors.Is(err, validation.ErrInvalidUsername) {
 				t.Fatalf("Register = (%+v, %v), want (nil, ErrInvalidUsername)", got, err)
 			}
@@ -157,14 +168,14 @@ func TestUserRegistrationServiceRegisterRejectsInvalidUsername(t *testing.T) {
 	}
 }
 
-func TestUserRegistrationServiceRegisterRejectsInvalidName(t *testing.T) {
+func TestUserServiceRegisterRejectsInvalidName(t *testing.T) {
 	for _, name := range []string{"", " \t\n", "\u00a0\u2003", strings.Repeat("Я", 81), "Иван\nПетров", "Иван\tПетров", "Иван\x00", "Иван\u2028Петров", "Иван\u2029Петров", "Иван\xff"} {
 		t.Run(fmt.Sprintf("%q", name), func(t *testing.T) {
 			repo := fakeUserRegistrationStore{create: func(context.Context, *user.User, *session.Session) error {
 				t.Fatal("store must not be called for invalid input")
 				return nil
 			}}
-			got, err := newUserRegistrationService(t, repo, unexpectedPasswordHasher(t)).Register(context.Background(), "ivan", name, testPassword)
+			got, err := newRegistrationUserService(t, repo, unexpectedPasswordHasher(t)).Register(context.Background(), "ivan", name, testPassword)
 			if got != nil || !errors.Is(err, validation.ErrInvalidName) {
 				t.Fatalf("Register = (%+v, %v), want (nil, ErrInvalidName)", got, err)
 			}
@@ -172,13 +183,13 @@ func TestUserRegistrationServiceRegisterRejectsInvalidName(t *testing.T) {
 	}
 }
 
-func TestUserRegistrationServiceRegisterStoreErrors(t *testing.T) {
+func TestUserServiceRegisterStoreErrors(t *testing.T) {
 	for _, want := range []error{user.ErrUsernameTaken, errors.New("database unavailable")} {
 		t.Run(want.Error(), func(t *testing.T) {
 			repo := fakeUserRegistrationStore{create: func(context.Context, *user.User, *session.Session) error {
 				return fmt.Errorf("save user: %w", want)
 			}}
-			got, err := newUserRegistrationService(t, repo, fakePasswordHasher(fixedPasswordHash)).Register(context.Background(), "Ivan", "Иван", testPassword)
+			got, err := newRegistrationUserService(t, repo, fakePasswordHasher(fixedPasswordHash)).Register(context.Background(), "Ivan", "Иван", testPassword)
 			if got != nil || !errors.Is(err, want) {
 				t.Fatalf("Register = (%+v, %v), want (nil, %v)", got, err, want)
 			}
@@ -186,27 +197,27 @@ func TestUserRegistrationServiceRegisterStoreErrors(t *testing.T) {
 	}
 }
 
-func TestUserRegistrationServiceRegisterCanceledContext(t *testing.T) {
+func TestUserServiceRegisterCanceledContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	repo := fakeUserRegistrationStore{create: func(context.Context, *user.User, *session.Session) error {
 		t.Fatal("store must not be called for an already canceled operation")
 		return nil
 	}}
-	got, err := newUserRegistrationService(t, repo, unexpectedPasswordHasher(t)).Register(ctx, "ivan", "Иван", testPassword)
+	got, err := newRegistrationUserService(t, repo, unexpectedPasswordHasher(t)).Register(ctx, "ivan", "Иван", testPassword)
 	if got != nil || !errors.Is(err, context.Canceled) {
 		t.Fatalf("Register = (%+v, %v), want (nil, context.Canceled)", got, err)
 	}
 }
 
-func TestUserRegistrationServiceRegisterRejectsInvalidPassword(t *testing.T) {
+func TestUserServiceRegisterRejectsInvalidPassword(t *testing.T) {
 	for _, password := range []string{"", strings.Repeat("a", 14), strings.Repeat("Я", 129), "long-password-\xff"} {
 		t.Run(fmt.Sprintf("length_%d", len(password)), func(t *testing.T) {
 			repo := fakeUserRegistrationStore{create: func(context.Context, *user.User, *session.Session) error {
 				t.Fatal("store must not be called for invalid input")
 				return nil
 			}}
-			got, err := newUserRegistrationService(t, repo, unexpectedPasswordHasher(t)).Register(t.Context(), "ivan", "Иван", password)
+			got, err := newRegistrationUserService(t, repo, unexpectedPasswordHasher(t)).Register(t.Context(), "ivan", "Иван", password)
 			if got != nil || !errors.Is(err, validation.ErrInvalidPassword) {
 				t.Fatalf("Register = (%+v, %v), want (nil, ErrInvalidPassword)", got, err)
 			}
@@ -214,7 +225,7 @@ func TestUserRegistrationServiceRegisterRejectsInvalidPassword(t *testing.T) {
 	}
 }
 
-func TestUserRegistrationServiceRegisterHashError(t *testing.T) {
+func TestUserServiceRegisterHashError(t *testing.T) {
 	want := errors.New("hashing failed")
 	hasher := fakePasswordHasher(func(string) (string, error) {
 		return "", want
@@ -223,13 +234,13 @@ func TestUserRegistrationServiceRegisterHashError(t *testing.T) {
 		t.Fatal("store must not be called after a hashing error")
 		return nil
 	}}
-	got, err := newUserRegistrationService(t, repo, hasher).Register(t.Context(), "ivan", "Иван", testPassword)
+	got, err := newRegistrationUserService(t, repo, hasher).Register(t.Context(), "ivan", "Иван", testPassword)
 	if got != nil || !errors.Is(err, want) {
 		t.Fatalf("Register = (%+v, %v), want (nil, hashing error)", got, err)
 	}
 }
 
-func TestUserRegistrationServiceRegisterCanceledDuringHashing(t *testing.T) {
+func TestUserServiceRegisterCanceledDuringHashing(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	hasher := fakePasswordHasher(func(string) (string, error) {
@@ -240,7 +251,7 @@ func TestUserRegistrationServiceRegisterCanceledDuringHashing(t *testing.T) {
 		t.Fatal("store must not be called after cancellation during hashing")
 		return nil
 	}}
-	got, err := newUserRegistrationService(t, store, hasher).Register(ctx, "ivan", "Иван", testPassword)
+	got, err := newRegistrationUserService(t, store, hasher).Register(ctx, "ivan", "Иван", testPassword)
 	if got != nil || !errors.Is(err, context.Canceled) {
 		t.Fatalf("Register = (%+v, %v), want (nil, context.Canceled)", got, err)
 	}

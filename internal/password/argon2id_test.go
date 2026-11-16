@@ -14,7 +14,7 @@ import (
 	"golang.org/x/crypto/argon2"
 )
 
-var _ service.PasswordHasher = password.Argon2id{}
+var _ service.PasswordService = password.Argon2id{}
 
 func TestArgon2idHash(t *testing.T) {
 	const original = "  My Passphrase ПРИВЕТ 😀  "

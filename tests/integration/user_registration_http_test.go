@@ -38,11 +38,16 @@ func TestUserRegistrationHTTP(t *testing.T) {
 		t.Fatal(err)
 	}
 	hasher := password.Argon2id{}
-	registration, err := service.NewUserRegistrationService(repository.NewUserRegistrationStore(db), hasher, 7*24*time.Hour)
+	const sessionLifetime = 7 * 24 * time.Hour
+	sessions, err := service.NewSessionService(repository.NewSessionRepository(db), sessionLifetime)
 	if err != nil {
 		t.Fatal(err)
 	}
-	h := router.New(handlers.NewUserRegistrationHandler(registration, false))
+	users, err := service.NewUserService(repository.NewUserRepository(db), repository.NewUserRegistrationStore(db), hasher, sessions, sessionLifetime)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := router.New(handlers.NewUserRegistrationHandler(users, false))
 	const body = `{"username":" IVAN ","name":" Иван Петров ","password":"long personal password"}`
 	register := func() *httptest.ResponseRecorder {
 		req := httptest.NewRequest(http.MethodPost, "/auth/register", strings.NewReader(body)).WithContext(ctx)

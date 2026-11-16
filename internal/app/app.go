@@ -17,6 +17,8 @@ import (
 	"chat/internal/service"
 )
 
+const sessionLifetime = 7 * 24 * time.Hour
+
 func Run(ctx context.Context, cfg config.Config) error {
 	server := &http.Server{
 		Addr:              cfg.HTTPAddr,
@@ -40,14 +42,19 @@ func Run(ctx context.Context, cfg config.Config) error {
 	}
 	defer db.Close()
 
+	userRepository := repository.NewUserRepository(db)
 	userRegistrationStore := repository.NewUserRegistrationStore(db)
-
-	userRegistrationService, err := service.NewUserRegistrationService(userRegistrationStore, password.Argon2id{}, 7*24*time.Hour)
+	sessionService, err := service.NewSessionService(repository.NewSessionRepository(db), sessionLifetime)
 	if err != nil {
-		return fmt.Errorf("create user registration service: %w", err)
+		return fmt.Errorf("create session service: %w", err)
 	}
 
-	userRegistrationHandler := handlers.NewUserRegistrationHandler(userRegistrationService, cfg.SessionCookieSecure)
+	userService, err := service.NewUserService(userRepository, userRegistrationStore, password.Argon2id{}, sessionService, sessionLifetime)
+	if err != nil {
+		return fmt.Errorf("create user service: %w", err)
+	}
+
+	userRegistrationHandler := handlers.NewUserRegistrationHandler(userService, cfg.SessionCookieSecure)
 	server.Handler = router.New(userRegistrationHandler)
 
 	log.Print("PostgreSQL connected")

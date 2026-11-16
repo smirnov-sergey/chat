@@ -18,15 +18,15 @@ import (
 	"chat/internal/validation"
 )
 
-type fakeUserRegistrationService func(context.Context, string, string, string) (*service.UserRegistration, error)
+type fakeUserRegistrationService func(context.Context, string, string, string) (*service.UserSession, error)
 
-func (fake fakeUserRegistrationService) Register(ctx context.Context, username, name, password string) (*service.UserRegistration, error) {
+func (fake fakeUserRegistrationService) Register(ctx context.Context, username, name, password string) (*service.UserSession, error) {
 	return fake(ctx, username, name, password)
 }
 
 var (
 	_ handlers.UserRegistrationService = fakeUserRegistrationService(nil)
-	_ handlers.UserRegistrationService = (*service.UserRegistrationService)(nil)
+	_ handlers.UserRegistrationService = (*service.UserService)(nil)
 )
 
 const registrationBody = `{"username":" IVAN ","name":" Иван ","password":"  LongPassword123!  "}`
@@ -40,12 +40,12 @@ func TestUserRegistrationHandler(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPost, "/auth/register", strings.NewReader(registrationBody))
 			req.Header.Set("Content-Type", "application/json; charset=utf-8")
 			calls := 0
-			registration := fakeUserRegistrationService(func(ctx context.Context, username, name, password string) (*service.UserRegistration, error) {
+			registration := fakeUserRegistrationService(func(ctx context.Context, username, name, password string) (*service.UserSession, error) {
 				calls++
 				if ctx != req.Context() || username != " IVAN " || name != " Иван " || password != "  LongPassword123!  " {
 					t.Fatal("service must receive the request context and unchanged input fields")
 				}
-				return &service.UserRegistration{
+				return &service.UserSession{
 					User:  &user.User{ID: 42, Username: "ivan", Name: "Иван", PasswordHash: "private-password-hash", CreatedAt: localTime, UpdatedAt: localTime},
 					Token: &session.Token{Value: token, ExpiresAt: now.Add(7 * 24 * time.Hour)},
 				}, nil
@@ -107,7 +107,7 @@ func TestUserRegistrationHandlerRejectsInvalidRequests(t *testing.T) {
 		{"oversized trailing whitespace", "application/json", registrationBody + strings.Repeat(" ", 4097), http.StatusRequestEntityTooLarge},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			registration := fakeUserRegistrationService(func(context.Context, string, string, string) (*service.UserRegistration, error) {
+			registration := fakeUserRegistrationService(func(context.Context, string, string, string) (*service.UserSession, error) {
 				t.Fatal("service must not be called for invalid requests")
 				return nil, nil
 			})
@@ -139,7 +139,7 @@ func TestUserRegistrationHandlerServiceErrors(t *testing.T) {
 		{"unexpected error", errors.New("private database error"), http.StatusInternalServerError, "internal server error"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			registration := fakeUserRegistrationService(func(context.Context, string, string, string) (*service.UserRegistration, error) {
+			registration := fakeUserRegistrationService(func(context.Context, string, string, string) (*service.UserSession, error) {
 				return nil, fmt.Errorf("registration failed: %w", tt.err)
 			})
 			req := httptest.NewRequest(http.MethodPost, "/auth/register", strings.NewReader(registrationBody))
