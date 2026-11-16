@@ -18,11 +18,11 @@ import (
 )
 
 type fakeUserRegistrationStore struct {
-	create func(context.Context, *user.User, string, *session.Session) error
+	create func(context.Context, *user.User, *session.Session) error
 }
 
-func (store fakeUserRegistrationStore) Create(ctx context.Context, u *user.User, hash string, s *session.Session) error {
-	return store.create(ctx, u, hash, s)
+func (store fakeUserRegistrationStore) Create(ctx context.Context, u *user.User, s *session.Session) error {
+	return store.create(ctx, u, s)
 }
 
 var _ service.UserRegistrationStore = fakeUserRegistrationStore{}
@@ -96,9 +96,9 @@ func TestUserRegistrationServiceRegister(t *testing.T) {
 				}
 				return testPasswordHash, nil
 			})
-			repo := fakeUserRegistrationStore{create: func(gotCtx context.Context, u *user.User, hash string, initialSession *session.Session) error {
+			repo := fakeUserRegistrationStore{create: func(gotCtx context.Context, u *user.User, initialSession *session.Session) error {
 				calls++
-				if hashCalls != 1 || hash != testPasswordHash {
+				if hashCalls != 1 || u.PasswordHash != testPasswordHash {
 					t.Fatal("store must receive the hash after one hashing call")
 				}
 				if gotCtx != ctx {
@@ -145,7 +145,7 @@ func TestUserRegistrationServiceRegister(t *testing.T) {
 func TestUserRegistrationServiceRegisterRejectsInvalidUsername(t *testing.T) {
 	for _, input := range []string{"", " \t\n", "AB", strings.Repeat("A", 33), "иван", "iv an", "iv-an", "ivan😀", "iv\x00an", "iv\xffan"} {
 		t.Run(fmt.Sprintf("%q", input), func(t *testing.T) {
-			repo := fakeUserRegistrationStore{create: func(context.Context, *user.User, string, *session.Session) error {
+			repo := fakeUserRegistrationStore{create: func(context.Context, *user.User, *session.Session) error {
 				t.Fatal("store must not be called for invalid input")
 				return nil
 			}}
@@ -160,7 +160,7 @@ func TestUserRegistrationServiceRegisterRejectsInvalidUsername(t *testing.T) {
 func TestUserRegistrationServiceRegisterRejectsInvalidName(t *testing.T) {
 	for _, name := range []string{"", " \t\n", "\u00a0\u2003", strings.Repeat("Я", 81), "Иван\nПетров", "Иван\tПетров", "Иван\x00", "Иван\u2028Петров", "Иван\u2029Петров", "Иван\xff"} {
 		t.Run(fmt.Sprintf("%q", name), func(t *testing.T) {
-			repo := fakeUserRegistrationStore{create: func(context.Context, *user.User, string, *session.Session) error {
+			repo := fakeUserRegistrationStore{create: func(context.Context, *user.User, *session.Session) error {
 				t.Fatal("store must not be called for invalid input")
 				return nil
 			}}
@@ -175,7 +175,7 @@ func TestUserRegistrationServiceRegisterRejectsInvalidName(t *testing.T) {
 func TestUserRegistrationServiceRegisterStoreErrors(t *testing.T) {
 	for _, want := range []error{user.ErrUsernameTaken, errors.New("database unavailable")} {
 		t.Run(want.Error(), func(t *testing.T) {
-			repo := fakeUserRegistrationStore{create: func(context.Context, *user.User, string, *session.Session) error {
+			repo := fakeUserRegistrationStore{create: func(context.Context, *user.User, *session.Session) error {
 				return fmt.Errorf("save user: %w", want)
 			}}
 			got, err := newUserRegistrationService(t, repo, fakePasswordHasher(fixedPasswordHash)).Register(context.Background(), "Ivan", "Иван", testPassword)
@@ -189,7 +189,7 @@ func TestUserRegistrationServiceRegisterStoreErrors(t *testing.T) {
 func TestUserRegistrationServiceRegisterCanceledContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	repo := fakeUserRegistrationStore{create: func(context.Context, *user.User, string, *session.Session) error {
+	repo := fakeUserRegistrationStore{create: func(context.Context, *user.User, *session.Session) error {
 		t.Fatal("store must not be called for an already canceled operation")
 		return nil
 	}}
@@ -202,7 +202,7 @@ func TestUserRegistrationServiceRegisterCanceledContext(t *testing.T) {
 func TestUserRegistrationServiceRegisterRejectsInvalidPassword(t *testing.T) {
 	for _, password := range []string{"", strings.Repeat("a", 14), strings.Repeat("Я", 129), "long-password-\xff"} {
 		t.Run(fmt.Sprintf("length_%d", len(password)), func(t *testing.T) {
-			repo := fakeUserRegistrationStore{create: func(context.Context, *user.User, string, *session.Session) error {
+			repo := fakeUserRegistrationStore{create: func(context.Context, *user.User, *session.Session) error {
 				t.Fatal("store must not be called for invalid input")
 				return nil
 			}}
@@ -219,7 +219,7 @@ func TestUserRegistrationServiceRegisterHashError(t *testing.T) {
 	hasher := fakePasswordHasher(func(string) (string, error) {
 		return "", want
 	})
-	repo := fakeUserRegistrationStore{create: func(context.Context, *user.User, string, *session.Session) error {
+	repo := fakeUserRegistrationStore{create: func(context.Context, *user.User, *session.Session) error {
 		t.Fatal("store must not be called after a hashing error")
 		return nil
 	}}
@@ -236,7 +236,7 @@ func TestUserRegistrationServiceRegisterCanceledDuringHashing(t *testing.T) {
 		cancel()
 		return testPasswordHash, nil
 	})
-	store := fakeUserRegistrationStore{create: func(context.Context, *user.User, string, *session.Session) error {
+	store := fakeUserRegistrationStore{create: func(context.Context, *user.User, *session.Session) error {
 		t.Fatal("store must not be called after cancellation during hashing")
 		return nil
 	}}

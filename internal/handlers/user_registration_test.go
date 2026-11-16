@@ -46,7 +46,7 @@ func TestUserRegistrationHandler(t *testing.T) {
 					t.Fatal("service must receive the request context and unchanged input fields")
 				}
 				return &service.UserRegistration{
-					User:  &user.User{ID: 42, Username: "ivan", Name: "Иван", CreatedAt: localTime, UpdatedAt: localTime},
+					User:  &user.User{ID: 42, Username: "ivan", Name: "Иван", PasswordHash: "private-password-hash", CreatedAt: localTime, UpdatedAt: localTime},
 					Token: &session.Token{Value: token, ExpiresAt: now.Add(7 * 24 * time.Hour)},
 				}, nil
 			})
@@ -66,8 +66,8 @@ func TestUserRegistrationHandler(t *testing.T) {
 				body["created_at"] != now.Format(time.RFC3339) || body["updated_at"] != now.Format(time.RFC3339) {
 				t.Fatalf("unexpected user response: %v", body)
 			}
-			if strings.Contains(rec.Body.String(), token) || strings.Contains(rec.Body.String(), "LongPassword") {
-				t.Fatal("JSON must not contain the session token or password")
+			if strings.Contains(rec.Body.String(), token) || strings.Contains(rec.Body.String(), "LongPassword") || strings.Contains(rec.Body.String(), "private-password-hash") {
+				t.Fatal("JSON must not contain the session token, password or password hash")
 			}
 			response := rec.Result()
 			defer response.Body.Close()

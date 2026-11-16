@@ -17,7 +17,7 @@ func NewUserRegistrationStore(db *sql.DB) *UserRegistrationStore {
 	return &UserRegistrationStore{db: db}
 }
 
-func (store *UserRegistrationStore) Create(ctx context.Context, u *user.User, passwordHash string, s *session.Session) error {
+func (store *UserRegistrationStore) Create(ctx context.Context, u *user.User, s *session.Session) error {
 	tx, err := store.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin registration transaction: %w", err)
@@ -25,7 +25,7 @@ func (store *UserRegistrationStore) Create(ctx context.Context, u *user.User, pa
 	defer tx.Rollback()
 
 	storedUser := *u
-	if err := NewUserRepository(tx).Create(ctx, &storedUser, passwordHash); err != nil {
+	if err := NewUserRepository(tx).Create(ctx, &storedUser); err != nil {
 		return err
 	}
 

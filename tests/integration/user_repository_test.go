@@ -32,10 +32,10 @@ func TestUserRepository(t *testing.T) {
 	}
 	repo := repository.NewUserRepository(db)
 	now := time.Date(2026, 11, 13, 12, 0, 0, 123456000, time.UTC)
-	input := user.User{Username: "ivan", Name: "Иван", CreatedAt: now, UpdatedAt: now}
 	const passwordHash = "test-password-hash"
+	input := user.User{Username: "ivan", Name: "Иван", PasswordHash: passwordHash, CreatedAt: now, UpdatedAt: now}
 	stored := input
-	if err := repo.Create(ctx, &stored, passwordHash); err != nil {
+	if err := repo.Create(ctx, &stored); err != nil {
 		t.Fatal(err)
 	}
 	if stored.ID <= 0 {
@@ -46,7 +46,7 @@ func TestUserRepository(t *testing.T) {
 		if got == nil {
 			t.Fatal("expected a user, got nil")
 		}
-		if got.ID != stored.ID || got.Username != input.Username || got.Name != input.Name ||
+		if got.ID != stored.ID || got.Username != input.Username || got.Name != input.Name || got.PasswordHash != input.PasswordHash ||
 			!got.CreatedAt.Equal(now) || !got.UpdatedAt.Equal(now) {
 			t.Fatalf("stored user = %+v, want ID %d and data %+v", got, stored.ID, input)
 		}
@@ -63,11 +63,27 @@ func TestUserRepository(t *testing.T) {
 		}
 	})
 
+	t.Run("legacy profile has an empty password hash", func(t *testing.T) {
+		if _, err := db.ExecContext(ctx, `
+			INSERT INTO users (username, name, created_at, updated_at)
+			VALUES ('legacy', 'Без пароля', $1, $1)`, now); err != nil {
+			t.Fatal(err)
+		}
+		profile, err := repo.GetByUsername(ctx, "legacy")
+		if err != nil || profile == nil {
+			t.Fatalf("existing profile lookup error = %v, want a profile", err)
+		}
+		if profile.PasswordHash != "" {
+			t.Fatal("NULL password hash must be read as an empty string")
+		}
+	})
+
 	t.Run("create with password hash", func(t *testing.T) {
 		value := input
 		value.Username = "anna"
-		const hash = "test-password-hash"
-		if err := repo.Create(ctx, &value, hash); err != nil {
+		const hash = "another-password-hash"
+		value.PasswordHash = hash
+		if err := repo.Create(ctx, &value); err != nil {
 			t.Fatal(err)
 		}
 		if value.ID <= 0 || value.ID == stored.ID {
@@ -77,7 +93,7 @@ func TestUserRepository(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if got.ID != value.ID || got.Name != value.Name ||
+		if got.ID != value.ID || got.Name != value.Name || got.PasswordHash != hash ||
 			!got.CreatedAt.Equal(now) || !got.UpdatedAt.Equal(now) {
 			t.Fatalf("stored profile = %+v, want %+v", got, value)
 		}
@@ -85,8 +101,9 @@ func TestUserRepository(t *testing.T) {
 		duplicate := value
 		duplicate.ID = 0
 		duplicate.Name = "Другое имя"
+		duplicate.PasswordHash = "different-hash"
 		before := duplicate
-		if err := repo.Create(ctx, &duplicate, "different-hash"); !errors.Is(err, user.ErrUsernameTaken) {
+		if err := repo.Create(ctx, &duplicate); !errors.Is(err, user.ErrUsernameTaken) {
 			t.Fatalf("Create error = %v, want ErrUsernameTaken", err)
 		}
 		if duplicate != before {
@@ -105,8 +122,9 @@ func TestUserRepository(t *testing.T) {
 	t.Run("empty hash does not create a profile", func(t *testing.T) {
 		value := input
 		value.Username = "no_password"
+		value.PasswordHash = ""
 		before := value
-		err := repo.Create(ctx, &value, "")
+		err := repo.Create(ctx, &value)
 		var pgErr *pgconn.PgError
 		if !errors.As(err, &pgErr) || pgErr.Code != "23514" {
 			t.Fatalf("Create error = %v, want a check constraint violation", err)
@@ -133,7 +151,7 @@ func TestUserRepository(t *testing.T) {
 		duplicate.Name = "Другое имя"
 		duplicate.UpdatedAt = now.Add(time.Hour)
 		before := duplicate
-		if err := repo.Create(ctx, &duplicate, passwordHash); !errors.Is(err, user.ErrUsernameTaken) {
+		if err := repo.Create(ctx, &duplicate); !errors.Is(err, user.ErrUsernameTaken) {
 			t.Fatalf("Create error = %v, want ErrUsernameTaken", err)
 		}
 		if duplicate != before {
@@ -149,7 +167,7 @@ func TestUserRepository(t *testing.T) {
 	t.Run("names may repeat", func(t *testing.T) {
 		other := input
 		other.Username = "petr"
-		if err := repo.Create(ctx, &other, passwordHash); err != nil {
+		if err := repo.Create(ctx, &other); err != nil {
 			t.Fatal(err)
 		}
 		if other.ID <= 0 || other.ID == stored.ID || other.Name != input.Name {
@@ -170,7 +188,7 @@ func TestUserRepository(t *testing.T) {
 		invalid := input
 		invalid.Username = "invalid-name"
 		before := invalid
-		err := repo.Create(ctx, &invalid, passwordHash)
+		err := repo.Create(ctx, &invalid)
 		var pgErr *pgconn.PgError
 		if !errors.As(err, &pgErr) || pgErr.Code != "23514" {
 			t.Fatalf("Create error = %v, want a wrapped check constraint violation", err)
@@ -184,7 +202,7 @@ func TestUserRepository(t *testing.T) {
 		canceled, stop := context.WithCancel(ctx)
 		stop()
 		value := input
-		if err := repo.Create(canceled, &value, passwordHash); !errors.Is(err, context.Canceled) {
+		if err := repo.Create(canceled, &value); !errors.Is(err, context.Canceled) {
 			t.Fatalf("Create error = %v, want context.Canceled", err)
 		}
 		if value != input {

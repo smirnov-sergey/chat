@@ -13,7 +13,7 @@ import (
 )
 
 type UserRegistrationStore interface {
-	Create(ctx context.Context, u *user.User, passwordHash string, s *session.Session) error
+	Create(ctx context.Context, u *user.User, s *session.Session) error
 }
 
 type PasswordHasher interface {
@@ -72,14 +72,15 @@ func (s *UserRegistrationService) Register(ctx context.Context, username, name, 
 
 	now := time.Now().UTC()
 	u := &user.User{
-		Username:  username,
-		Name:      name,
-		CreatedAt: now,
-		UpdatedAt: now,
+		Username:     username,
+		Name:         name,
+		PasswordHash: passwordHash,
+		CreatedAt:    now,
+		UpdatedAt:    now,
 	}
 
 	initialSession, token := newSession(0, now, s.sessionLifetime)
-	if err := s.store.Create(ctx, u, passwordHash, initialSession); err != nil {
+	if err := s.store.Create(ctx, u, initialSession); err != nil {
 		return nil, err
 	}
 

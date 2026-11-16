@@ -21,7 +21,7 @@ func NewUserRepository(db rowQueryer) *UserRepository {
 	return &UserRepository{db: db}
 }
 
-func (repo *UserRepository) Create(ctx context.Context, u *user.User, passwordHash string) error {
+func (repo *UserRepository) Create(ctx context.Context, u *user.User) error {
 	var id int64
 
 	err := repo.db.QueryRowContext(ctx, `
@@ -39,7 +39,7 @@ func (repo *UserRepository) Create(ctx context.Context, u *user.User, passwordHa
 		u.Name,
 		u.CreatedAt,
 		u.UpdatedAt,
-		passwordHash,
+		u.PasswordHash,
 	).Scan(&id)
 
 	if errors.Is(err, sql.ErrNoRows) {
@@ -57,7 +57,7 @@ func (repo *UserRepository) Create(ctx context.Context, u *user.User, passwordHa
 func (repo *UserRepository) GetByUsername(ctx context.Context, username string) (*user.User, error) {
 	var u user.User
 	err := repo.db.QueryRowContext(ctx, `
-		SELECT id, username, name, created_at, updated_at
+		SELECT id, username, name, created_at, updated_at, COALESCE(password_hash, '')
 		FROM users
 		WHERE username = $1`, username,
 	).Scan(
@@ -66,6 +66,7 @@ func (repo *UserRepository) GetByUsername(ctx context.Context, username string) 
 		&u.Name,
 		&u.CreatedAt,
 		&u.UpdatedAt,
+		&u.PasswordHash,
 	)
 
 	if errors.Is(err, sql.ErrNoRows) {
