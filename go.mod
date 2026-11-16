@@ -1,6 +1,6 @@
 module chat
 
-go 1.26.9
+go 1.26.11
 
 require (
 	github.com/jackc/pgx/v5 v5.13.0

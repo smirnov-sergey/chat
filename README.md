@@ -61,7 +61,7 @@ docs/               документация проекта
 
 Backend:
 
-Требуется Go 1.26.9 или новее. Из корня репозитория:
+Требуется Go 1.26.11 или новее. Из корня репозитория:
 
 ```powershell
 docker compose --env-file .env -f docker/docker-compose.dev.yml up -d --wait postgres
