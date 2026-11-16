@@ -1,4 +1,4 @@
-package main
+package app
 
 import (
 	"context"
@@ -39,8 +39,10 @@ func serve(ctx context.Context, server *http.Server, listener net.Listener, shut
 	if errors.Is(err, http.ErrServerClosed) {
 		err = nil
 	}
+
 	if shutdownErr != nil || err != nil {
 		return fmt.Errorf("stop HTTP server: %w", errors.Join(shutdownErr, err))
 	}
+
 	return nil
 }
