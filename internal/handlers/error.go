@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 
+	"chat/internal/model/session"
 	"chat/internal/model/user"
 	"chat/internal/validation"
 )
@@ -34,6 +35,8 @@ func handleError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusBadRequest, validation.ErrInvalidName)
 	case errors.Is(err, validation.ErrInvalidPassword):
 		writeError(w, http.StatusBadRequest, validation.ErrInvalidPassword)
+	case errors.Is(err, session.ErrInvalid):
+		writeError(w, http.StatusUnauthorized, session.ErrInvalid)
 	case errors.Is(err, user.ErrInvalidCredentials):
 		writeError(w, http.StatusUnauthorized, user.ErrInvalidCredentials)
 	case errors.Is(err, user.ErrUsernameTaken):
