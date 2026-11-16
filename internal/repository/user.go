@@ -79,3 +79,30 @@ func (repo *UserRepository) GetByUsername(ctx context.Context, username string) 
 
 	return &u, nil
 }
+
+func (repo *UserRepository) GetByID(ctx context.Context, id int64) (*user.User, error) {
+	var u user.User
+
+	err := repo.db.QueryRowContext(ctx, `
+		SELECT id, username, name, created_at, updated_at, COALESCE(password_hash, '')
+		FROM users
+		WHERE id = $1`, id,
+	).Scan(
+		&u.ID,
+		&u.Username,
+		&u.Name,
+		&u.CreatedAt,
+		&u.UpdatedAt,
+		&u.PasswordHash,
+	)
+
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, user.ErrNotFound
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("get user by ID: %w", err)
+	}
+
+	return &u, nil
+}

@@ -76,6 +76,13 @@ func TestUserRepository(t *testing.T) {
 		if profile.PasswordHash != "" {
 			t.Fatal("NULL password hash must be read as an empty string")
 		}
+		byID, err := repo.GetByID(ctx, profile.ID)
+		if err != nil || byID == nil {
+			t.Fatalf("legacy profile lookup by ID error = %v, want a profile", err)
+		}
+		if *byID != *profile {
+			t.Fatal("lookup by ID must return the same legacy profile with an empty password hash")
+		}
 	})
 
 	t.Run("create with password hash", func(t *testing.T) {
@@ -96,6 +103,13 @@ func TestUserRepository(t *testing.T) {
 		if got.ID != value.ID || got.Name != value.Name || got.PasswordHash != hash ||
 			!got.CreatedAt.Equal(now) || !got.UpdatedAt.Equal(now) {
 			t.Fatalf("stored profile = %+v, want %+v", got, value)
+		}
+		byID, err := repo.GetByID(ctx, value.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if byID == nil || *byID != *got {
+			t.Fatal("lookup by ID must return the requested user, including their password hash")
 		}
 
 		duplicate := value
@@ -144,6 +158,23 @@ func TestUserRepository(t *testing.T) {
 			t.Fatal(err)
 		}
 		assertStoredUser(t, got)
+	})
+
+	t.Run("read persisted user by ID", func(t *testing.T) {
+		got, err := repo.GetByID(ctx, stored.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertStoredUser(t, got)
+	})
+
+	t.Run("missing ID", func(t *testing.T) {
+		for _, id := range []int64{0, -1, 1<<63 - 1} {
+			got, err := repo.GetByID(ctx, id)
+			if got != nil || !errors.Is(err, user.ErrNotFound) {
+				t.Fatalf("GetByID(%d) error = %v, want nil user and ErrNotFound", id, err)
+			}
+		}
 	})
 
 	t.Run("duplicate does not overwrite user", func(t *testing.T) {
@@ -210,6 +241,9 @@ func TestUserRepository(t *testing.T) {
 		}
 		if _, err := repo.GetByUsername(canceled, input.Username); !errors.Is(err, context.Canceled) {
 			t.Fatalf("GetByUsername error = %v, want context.Canceled", err)
+		}
+		if got, err := repo.GetByID(canceled, stored.ID); got != nil || !errors.Is(err, context.Canceled) {
+			t.Fatalf("GetByID error = %v, want nil user and context.Canceled", err)
 		}
 	})
 }
