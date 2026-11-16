@@ -19,6 +19,7 @@ const (
 type UserService interface {
 	Register(ctx context.Context, username, name, password string) (*service.UserSession, error)
 	Login(ctx context.Context, username, password string) (*service.UserSession, error)
+	Logout(ctx context.Context, token string) error
 	GetByID(ctx context.Context, id int64) (*user.User, error)
 }
 
@@ -108,6 +109,23 @@ func (h *UserHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, dto.ToUserResponse(u))
+}
+
+func (h *UserHandler) Logout(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	var token string
+
+	if cookie, err := r.Cookie(sessionCookieName); err == nil {
+		token = cookie.Value
+	}
+
+	if err := h.userService.Logout(r.Context(), token); err != nil {
+		handleError(w, err)
+		return
+	}
+
+	clearSessionCookie(w, h.secureCookies)
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func parseUserID(r *http.Request) (int64, error) {

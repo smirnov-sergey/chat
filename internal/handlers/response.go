@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"time"
 
 	"chat/internal/dto"
 	"chat/internal/model/session"
@@ -36,6 +37,19 @@ func setSessionCookie(w http.ResponseWriter, token *session.Token, secure bool) 
 		Value:    token.Value,
 		Path:     "/",
 		Expires:  token.ExpiresAt,
+		HttpOnly: true,
+		Secure:   secure,
+		SameSite: http.SameSiteLaxMode,
+	})
+}
+
+func clearSessionCookie(w http.ResponseWriter, secure bool) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     sessionCookieName,
+		Value:    "",
+		Path:     "/",
+		Expires:  time.Unix(1, 0).UTC(),
+		MaxAge:   -1,
 		HttpOnly: true,
 		Secure:   secure,
 		SameSite: http.SameSiteLaxMode,

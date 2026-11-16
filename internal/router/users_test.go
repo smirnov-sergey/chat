@@ -145,7 +145,7 @@ func TestUserProfileHTTPErrors(t *testing.T) {
 }
 
 func TestAuthRoutesRejectCrossOrigin(t *testing.T) {
-	for _, path := range []string{"/auth/register", "/auth/login"} {
+	for _, path := range []string{"/auth/register", "/auth/login", "/auth/logout"} {
 		t.Run(path, func(t *testing.T) {
 			for _, headers := range []map[string]string{
 				{"Origin": "https://evil.example"},
@@ -174,7 +174,8 @@ func TestAuthRoutesRejectCrossOrigin(t *testing.T) {
 }
 
 func TestPublicRoutesDoNotAuthenticateSessions(t *testing.T) {
-	h := newTestHTTPHandler(handlers.NewUserHandler(fakeUserService{}, true), unexpectedSessionAuthenticator(t))
+	users := fakeUserService{logout: func(context.Context, string) error { return nil }}
+	h := newTestHTTPHandler(handlers.NewUserHandler(users, true), unexpectedSessionAuthenticator(t))
 	for _, tt := range []struct {
 		method string
 		path   string
@@ -183,6 +184,7 @@ func TestPublicRoutesDoNotAuthenticateSessions(t *testing.T) {
 		{http.MethodGet, "/health", http.StatusOK},
 		{http.MethodPost, "/auth/register", http.StatusBadRequest},
 		{http.MethodPost, "/auth/login", http.StatusBadRequest},
+		{http.MethodPost, "/auth/logout", http.StatusNoContent},
 	} {
 		t.Run(tt.path, func(t *testing.T) {
 			req := httptest.NewRequest(tt.method, tt.path, strings.NewReader("{"))

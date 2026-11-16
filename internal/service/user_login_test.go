@@ -29,17 +29,24 @@ func (fake fakeUserRepository) GetByID(ctx context.Context, id int64) (*user.Use
 
 type fakePasswordVerifier func(string, string) (bool, error)
 
-type fakeSessionCreator func(context.Context, int64) (*session.Token, error)
+type fakeUserSessions struct {
+	create func(context.Context, int64) (*session.Token, error)
+	logout func(context.Context, string) error
+}
 
-func (fake fakeSessionCreator) Create(ctx context.Context, userID int64) (*session.Token, error) {
-	return fake(ctx, userID)
+func (fake fakeUserSessions) Create(ctx context.Context, userID int64) (*session.Token, error) {
+	return fake.create(ctx, userID)
+}
+
+func (fake fakeUserSessions) Logout(ctx context.Context, token string) error {
+	return fake.logout(ctx, token)
 }
 
 var (
 	_ service.UserRepository = fakeUserRepository{}
 	_ service.UserRepository = (*repository.UserRepository)(nil)
-	_ service.SessionCreator = fakeSessionCreator(nil)
-	_ service.SessionCreator = (*service.SessionService)(nil)
+	_ service.UserSessions   = fakeUserSessions{}
+	_ service.UserSessions   = (*service.SessionService)(nil)
 )
 
 func TestUserServiceLogin(t *testing.T) {
@@ -73,13 +80,13 @@ func TestUserServiceLogin(t *testing.T) {
 				calls = append(calls, "verify")
 				return true, nil
 			})
-			sessions := fakeSessionCreator(func(gotCtx context.Context, id int64) (*session.Token, error) {
+			sessions := fakeUserSessions{create: func(gotCtx context.Context, id int64) (*session.Token, error) {
 				if gotCtx != ctx || id != u.ID {
 					t.Fatal("session creation must receive the authenticated user ID and caller's context")
 				}
 				calls = append(calls, "session")
 				return token, nil
-			})
+			}}
 			got, err := newLoginUserService(t, repo, verifier, sessions).Login(ctx, tt.username, tt.password)
 			if err != nil || got == nil || got.User != u || got.Token != token {
 				t.Fatalf("Login error = %v; want the authenticated user and created token", err)
@@ -132,10 +139,10 @@ func TestUserServiceLoginFailures(t *testing.T) {
 				calls = append(calls, "verify")
 				return tt.matches, tt.verificationError
 			})
-			sessions := fakeSessionCreator(func(context.Context, int64) (*session.Token, error) {
+			sessions := fakeUserSessions{create: func(context.Context, int64) (*session.Token, error) {
 				calls = append(calls, "session")
 				return nil, tt.sessionError
-			})
+			}}
 			got, err := newLoginUserService(t, repo, verifier, sessions).Login(t.Context(), tt.username, tt.password)
 			if got != nil || !errors.Is(err, tt.want) {
 				t.Fatalf("Login error = %v, want nil result and %v", err, tt.want)
@@ -168,10 +175,10 @@ func TestUserServiceLoginCancellation(t *testing.T) {
 				cancel()
 				return true, nil
 			})
-			sessions := fakeSessionCreator(func(context.Context, int64) (*session.Token, error) {
+			sessions := fakeUserSessions{create: func(context.Context, int64) (*session.Token, error) {
 				t.Fatal("canceled login must not create a session")
 				return nil, nil
-			})
+			}}
 			got, err := newLoginUserService(t, repo, verifier, sessions).Login(ctx, "ivan", testPassword)
 			if got != nil || !errors.Is(err, context.Canceled) {
 				t.Fatalf("Login error = %v, want nil result and context.Canceled", err)
@@ -184,7 +191,7 @@ func TestUserServiceLoginCancellation(t *testing.T) {
 	}
 }
 
-func newLoginUserService(t *testing.T, repo fakeUserRepository, verifier fakePasswordVerifier, sessions fakeSessionCreator) *service.UserService {
+func newLoginUserService(t *testing.T, repo fakeUserRepository, verifier fakePasswordVerifier, sessions fakeUserSessions) *service.UserService {
 	t.Helper()
 	s, err := service.NewUserService(repo, nil, fakePasswordService{verify: verifier}, sessions, 7*24*time.Hour)
 	if err != nil {

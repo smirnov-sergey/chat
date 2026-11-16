@@ -28,7 +28,7 @@ func SessionMiddleware(sessionAuthenticator SessionAuthenticator) func(http.Hand
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			switch r.URL.Path {
-			case "/health", "/auth/register", "/auth/login":
+			case "/health", "/auth/register", "/auth/login", "/auth/logout":
 				next.ServeHTTP(w, r)
 				return
 			}

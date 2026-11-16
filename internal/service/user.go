@@ -27,8 +27,9 @@ type PasswordService interface {
 	Verify(password, encoded string) (bool, error)
 }
 
-type SessionCreator interface {
+type UserSessions interface {
 	Create(ctx context.Context, userID int64) (*session.Token, error)
+	Logout(ctx context.Context, token string) error
 }
 
 type UserSession struct {
@@ -40,7 +41,7 @@ type UserService struct {
 	repository        UserRepository
 	registrationStore UserRegistrationStore
 	passwords         PasswordService
-	sessions          SessionCreator
+	sessions          UserSessions
 	sessionLifetime   time.Duration
 }
 
@@ -48,7 +49,7 @@ func NewUserService(
 	repository UserRepository,
 	registrationStore UserRegistrationStore,
 	passwords PasswordService,
-	sessions SessionCreator,
+	sessions UserSessions,
 	sessionLifetime time.Duration,
 ) (*UserService, error) {
 	if sessionLifetime <= 0 {
@@ -172,4 +173,8 @@ func (s *UserService) GetByID(ctx context.Context, id int64) (*user.User, error)
 	}
 
 	return u, nil
+}
+
+func (s *UserService) Logout(ctx context.Context, token string) error {
+	return s.sessions.Logout(ctx, token)
 }

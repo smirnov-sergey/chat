@@ -129,7 +129,7 @@ func TestGetUserWithoutSession(t *testing.T) {
 }
 
 func TestSessionMiddlewarePublicPaths(t *testing.T) {
-	for _, path := range []string{"/health", "/health?probe=1", "/auth/register", "/auth/login"} {
+	for _, path := range []string{"/health", "/health?probe=1", "/auth/register", "/auth/login", "/auth/logout"} {
 		for _, method := range []string{http.MethodGet, http.MethodHead, http.MethodPost} {
 			t.Run(method+" "+path, func(t *testing.T) {
 				sessions := fakeSessionAuthenticator(func(context.Context, string) (*session.Session, error) {

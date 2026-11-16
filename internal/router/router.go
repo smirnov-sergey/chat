@@ -11,6 +11,7 @@ func New(userHandler *handlers.UserHandler) http.Handler {
 	mux.HandleFunc("GET /health", handlers.Health)
 	mux.HandleFunc("POST /auth/register", userHandler.Register)
 	mux.HandleFunc("POST /auth/login", userHandler.Login)
+	mux.HandleFunc("POST /auth/logout", userHandler.Logout)
 	mux.HandleFunc("GET /users/{id}", userHandler.GetByID)
 	return mux
 }

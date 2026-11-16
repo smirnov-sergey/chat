@@ -16,9 +16,14 @@ import (
 )
 
 type fakeUserService struct {
+	logout   func(context.Context, string) error
 	getByID  func(context.Context, int64) (*user.User, error)
 	register func(context.Context, string, string, string) (*service.UserSession, error)
 	login    func(context.Context, string, string) (*service.UserSession, error)
+}
+
+func (fake fakeUserService) Logout(ctx context.Context, token string) error {
+	return fake.logout(ctx, token)
 }
 
 func (fake fakeUserService) GetByID(ctx context.Context, id int64) (*user.User, error) {
@@ -78,6 +83,7 @@ func TestRouterRejectsUnsupportedRequests(t *testing.T) {
 		{"unsupported method", http.MethodPost, "/health", http.StatusMethodNotAllowed},
 		{"registration requires POST", http.MethodGet, "/auth/register", http.StatusMethodNotAllowed},
 		{"login requires POST", http.MethodGet, "/auth/login", http.StatusMethodNotAllowed},
+		{"logout requires POST", http.MethodGet, "/auth/logout", http.StatusMethodNotAllowed},
 	}
 
 	for _, tt := range tests {

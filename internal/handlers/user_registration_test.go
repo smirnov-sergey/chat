@@ -19,9 +19,14 @@ import (
 )
 
 type fakeUserService struct {
+	logout   func(context.Context, string) error
 	getByID  func(context.Context, int64) (*user.User, error)
 	register func(context.Context, string, string, string) (*service.UserSession, error)
 	login    func(context.Context, string, string) (*service.UserSession, error)
+}
+
+func (fake fakeUserService) Logout(ctx context.Context, token string) error {
+	return fake.logout(ctx, token)
 }
 
 func (fake fakeUserService) GetByID(ctx context.Context, id int64) (*user.User, error) {
