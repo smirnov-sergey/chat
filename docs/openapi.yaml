@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: Chat API
-  description: HTTP API проекта Chat. Пока доступна только проверка работоспособности.
+  description: HTTP API проекта Chat. Доступны проверка работоспособности и регистрация с автоматическим входом.
   version: 0.1.0
 
 servers:
@@ -29,4 +29,177 @@ paths:
                   status:
                     type: string
                     const: ok
+
+  /auth/register:
+    post:
+      summary: Регистрация пользователя
+      description: |
+        Создаёт пользователя и первую сессию одной транзакцией.
+        При успехе автоматически выполняется вход: cookie chat_session
+        действует 7 дней без продления по активности. Токен не возвращается в JSON.
+
+        Запросы браузера с чужого сайта отклоняются. Для браузерного клиента
+        UI и API должны иметь один origin; CORS сейчас не настроен.
+        Запросы CLI без заголовков Origin и Sec-Fetch-Site допускаются.
+      operationId: registerUser
+      security: []
+      requestBody:
+        required: true
+        description: Один JSON-объект, не более 4096 байт. Неизвестные поля запрещены.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserRegistrationRequest'
+            example:
+              username: ' Ivan '
+              name: ' Иван Петров '
+              password: correct horse battery staple
+      responses:
+        '201':
+          description: Пользователь и первая сессия созданы.
+          headers:
+            Set-Cookie:
+              description: |
+                chat_session с атрибутами Path=/, HttpOnly, SameSite=Lax и Expires.
+                Срок действия — 7 дней. Secure включён по умолчанию и управляется
+                SESSION_COOKIE_SECURE; для локального HTTP используется false.
+              schema:
+                type: string
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '400':
+          description: Некорректный JSON, неизвестные поля или недопустимые значения полей.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: invalid request body
+        '403':
+          description: Запрос с чужого сайта отклонён.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: cross-origin request blocked
+        '409':
+          description: Нормализованный username уже занят. Новая сессия не создаётся.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: username already taken
+        '413':
+          description: Тело запроса превышает 4096 байт.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: request body too large
+        '415':
+          description: Отсутствует или некорректен Content-Type application/json.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: Content-Type must be application/json
+        '500':
+          description: Внутренняя ошибка. Технические подробности клиенту не возвращаются.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: internal server error
+
+components:
+  schemas:
+    UserRegistrationRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - username
+        - name
+        - password
+      properties:
+        username:
+          type: string
+          minLength: 3
+          description: |
+            Внешние пробелы удаляются, буквы приводятся к нижнему регистру.
+            После нормализации допускаются 3–32 символа a–z, 0–9 и _.
+          example: Ivan
+        name:
+          type: string
+          minLength: 1
+          description: |
+            Внешние пробелы удаляются. После нормализации — 1–80 Unicode-кодовых
+            точек без управляющих символов и переносов строк. Регистр и пробелы
+            внутри имени сохраняются; совпадения с чужими именами допустимы.
+          example: Иван Петров
+        password:
+          type: string
+          format: password
+          writeOnly: true
+          minLength: 15
+          maxLength: 128
+          description: |
+            От 15 до 128 Unicode-кодовых точек. Пробелы разрешены;
+            обрезка пробелов, смена регистра и нормализация не выполняются.
+            Обязательных классов символов нет.
+    UserResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - username
+        - name
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: integer
+          format: int64
+          minimum: 1
+          example: 42
+        username:
+          type: string
+          minLength: 3
+          maxLength: 32
+          pattern: '^[a-z0-9_]{3,32}$'
+          example: ivan
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+          example: Иван Петров
+        created_at:
+          type: string
+          format: date-time
+          description: Время создания пользователя в UTC.
+          example: '2026-11-16T12:00:00Z'
+        updated_at:
+          type: string
+          format: date-time
+          description: При регистрации равно created_at.
+          example: '2026-11-16T12:00:00Z'
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          minLength: 1
 
