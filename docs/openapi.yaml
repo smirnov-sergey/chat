@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: Chat API
-  description: HTTP API проекта Chat. Доступны проверка работоспособности и регистрация с автоматическим входом.
+  description: HTTP API проекта Chat. Доступны проверка работоспособности, регистрация и вход пользователя.
   version: 0.1.0
 
 servers:
@@ -122,6 +122,101 @@ paths:
               example:
                 error: internal server error
 
+  /auth/login:
+    post:
+      summary: Вход пользователя
+      description: |
+        Проверяет username и пароль, создаёт новую сессию и возвращает профиль.
+        Cookie chat_session действует 7 дней без продления по активности.
+        Ранее выданные сессии остаются действующими. Токен не возвращается в JSON.
+        Время создания и обновления пользователя при входе не изменяется.
+
+        Неверный username, неправильный пароль или отсутствие пароля у старого
+        профиля дают один ответ 401: invalid username or password.
+
+        Запросы браузера с чужого сайта отклоняются. Для браузерного клиента
+        UI и API должны иметь один origin; CORS сейчас не настроен.
+        Запросы CLI без заголовков Origin и Sec-Fetch-Site допускаются.
+      operationId: loginUser
+      security: []
+      requestBody:
+        required: true
+        description: Один JSON-объект, не более 4096 байт. Неизвестные поля запрещены.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserLoginRequest'
+            example:
+              username: ' Ivan '
+              password: correct horse battery staple
+      responses:
+        '200':
+          description: Пользователь вошёл; создана новая сессия.
+          headers:
+            Set-Cookie:
+              description: |
+                chat_session с атрибутами Path=/, HttpOnly, SameSite=Lax и Expires.
+                Срок действия — 7 дней. Secure включён по умолчанию и управляется
+                SESSION_COOKIE_SECURE; для локального HTTP используется false.
+              schema:
+                type: string
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '400':
+          description: Некорректный JSON, неизвестные поля или неверные типы полей.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: invalid request body
+        '401':
+          description: Неверный username или пароль. Новая сессия не создаётся; Set-Cookie отсутствует.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: invalid username or password
+        '403':
+          description: Запрос с чужого сайта отклонён.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: cross-origin request blocked
+        '413':
+          description: Тело запроса превышает 4096 байт.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: request body too large
+        '415':
+          description: Отсутствует или некорректен Content-Type application/json.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: Content-Type must be application/json
+        '500':
+          description: Внутренняя ошибка. Технические подробности клиенту не возвращаются.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: internal server error
+
 components:
   schemas:
     UserRegistrationRequest:
@@ -157,6 +252,32 @@ components:
             От 15 до 128 Unicode-кодовых точек. Пробелы разрешены;
             обрезка пробелов, смена регистра и нормализация не выполняются.
             Обязательных классов символов нет.
+    UserLoginRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - username
+        - password
+      properties:
+        username:
+          type: string
+          minLength: 3
+          description: |
+            Внешние пробелы удаляются, буквы приводятся к нижнему регистру.
+            После нормализации допускаются 3–32 символа a–z, 0–9 и _.
+            Неверное значение приводит к ответу 401.
+          example: Ivan
+        password:
+          type: string
+          format: password
+          writeOnly: true
+          minLength: 1
+          maxLength: 128
+          description: |
+            Пароль существующего пользователя, от 1 до 128 Unicode-кодовых точек.
+            Передаётся без обрезки пробелов, смены регистра и нормализации.
+            Минимальная длина нового пароля при регистрации здесь не применяется.
+            Пустой, слишком длинный или несовпадающий пароль приводит к ответу 401.
     UserResponse:
       type: object
       additionalProperties: false
