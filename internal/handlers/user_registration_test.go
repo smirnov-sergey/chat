@@ -18,20 +18,27 @@ import (
 	"chat/internal/validation"
 )
 
-type fakeUserRegistrationService func(context.Context, string, string, string) (*service.UserSession, error)
+type fakeUserService struct {
+	register func(context.Context, string, string, string) (*service.UserSession, error)
+	login    func(context.Context, string, string) (*service.UserSession, error)
+}
 
-func (fake fakeUserRegistrationService) Register(ctx context.Context, username, name, password string) (*service.UserSession, error) {
-	return fake(ctx, username, name, password)
+func (fake fakeUserService) Register(ctx context.Context, username, name, password string) (*service.UserSession, error) {
+	return fake.register(ctx, username, name, password)
+}
+
+func (fake fakeUserService) Login(ctx context.Context, username, password string) (*service.UserSession, error) {
+	return fake.login(ctx, username, password)
 }
 
 var (
-	_ handlers.UserRegistrationService = fakeUserRegistrationService(nil)
-	_ handlers.UserRegistrationService = (*service.UserService)(nil)
+	_ handlers.UserService = fakeUserService{}
+	_ handlers.UserService = (*service.UserService)(nil)
 )
 
 const registrationBody = `{"username":" IVAN ","name":" Иван ","password":"  LongPassword123!  "}`
 
-func TestUserRegistrationHandler(t *testing.T) {
+func TestUserHandlerRegister(t *testing.T) {
 	for _, secure := range []bool{false, true} {
 		t.Run(fmt.Sprintf("secure_%v", secure), func(t *testing.T) {
 			now := time.Date(2026, 11, 16, 12, 0, 0, 0, time.UTC)
@@ -40,7 +47,7 @@ func TestUserRegistrationHandler(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPost, "/auth/register", strings.NewReader(registrationBody))
 			req.Header.Set("Content-Type", "application/json; charset=utf-8")
 			calls := 0
-			registration := fakeUserRegistrationService(func(ctx context.Context, username, name, password string) (*service.UserSession, error) {
+			registration := fakeUserService{register: func(ctx context.Context, username, name, password string) (*service.UserSession, error) {
 				calls++
 				if ctx != req.Context() || username != " IVAN " || name != " Иван " || password != "  LongPassword123!  " {
 					t.Fatal("service must receive the request context and unchanged input fields")
@@ -49,9 +56,9 @@ func TestUserRegistrationHandler(t *testing.T) {
 					User:  &user.User{ID: 42, Username: "ivan", Name: "Иван", PasswordHash: "private-password-hash", CreatedAt: localTime, UpdatedAt: localTime},
 					Token: &session.Token{Value: token, ExpiresAt: now.Add(7 * 24 * time.Hour)},
 				}, nil
-			})
+			}}
 			rec := httptest.NewRecorder()
-			handlers.NewUserRegistrationHandler(registration, secure).Register(rec, req)
+			handlers.NewUserHandler(registration, secure).Register(rec, req)
 			if calls != 1 || rec.Code != http.StatusCreated {
 				t.Fatalf("calls = %d, status = %d; want 1, 201", calls, rec.Code)
 			}
@@ -85,7 +92,7 @@ func TestUserRegistrationHandler(t *testing.T) {
 	}
 }
 
-func TestUserRegistrationHandlerRejectsInvalidRequests(t *testing.T) {
+func TestUserHandlerRegisterRejectsInvalidRequests(t *testing.T) {
 	for _, tt := range []struct {
 		name        string
 		contentType string
@@ -107,16 +114,16 @@ func TestUserRegistrationHandlerRejectsInvalidRequests(t *testing.T) {
 		{"oversized trailing whitespace", "application/json", registrationBody + strings.Repeat(" ", 4097), http.StatusRequestEntityTooLarge},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			registration := fakeUserRegistrationService(func(context.Context, string, string, string) (*service.UserSession, error) {
+			registration := fakeUserService{register: func(context.Context, string, string, string) (*service.UserSession, error) {
 				t.Fatal("service must not be called for invalid requests")
 				return nil, nil
-			})
+			}}
 			req := httptest.NewRequest(http.MethodPost, "/auth/register", strings.NewReader(tt.body))
 			if tt.contentType != "" {
 				req.Header.Set("Content-Type", tt.contentType)
 			}
 			rec := httptest.NewRecorder()
-			handlers.NewUserRegistrationHandler(registration, true).Register(rec, req)
+			handlers.NewUserHandler(registration, true).Register(rec, req)
 			if rec.Code != tt.status {
 				t.Fatalf("status = %d, want %d", rec.Code, tt.status)
 			}
@@ -125,7 +132,7 @@ func TestUserRegistrationHandlerRejectsInvalidRequests(t *testing.T) {
 	}
 }
 
-func TestUserRegistrationHandlerServiceErrors(t *testing.T) {
+func TestUserHandlerRegisterServiceErrors(t *testing.T) {
 	for _, tt := range []struct {
 		name    string
 		err     error
@@ -139,13 +146,13 @@ func TestUserRegistrationHandlerServiceErrors(t *testing.T) {
 		{"unexpected error", errors.New("private database error"), http.StatusInternalServerError, "internal server error"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			registration := fakeUserRegistrationService(func(context.Context, string, string, string) (*service.UserSession, error) {
+			registration := fakeUserService{register: func(context.Context, string, string, string) (*service.UserSession, error) {
 				return nil, fmt.Errorf("registration failed: %w", tt.err)
-			})
+			}}
 			req := httptest.NewRequest(http.MethodPost, "/auth/register", strings.NewReader(registrationBody))
 			req.Header.Set("Content-Type", "application/json")
 			rec := httptest.NewRecorder()
-			handlers.NewUserRegistrationHandler(registration, true).Register(rec, req)
+			handlers.NewUserHandler(registration, true).Register(rec, req)
 			if rec.Code != tt.status {
 				t.Fatalf("status = %d, want %d", rec.Code, tt.status)
 			}

@@ -54,8 +54,8 @@ func Run(ctx context.Context, cfg config.Config) error {
 		return fmt.Errorf("create user service: %w", err)
 	}
 
-	userRegistrationHandler := handlers.NewUserRegistrationHandler(userService, cfg.SessionCookieSecure)
-	server.Handler = router.New(userRegistrationHandler)
+	userHandler := handlers.NewUserHandler(userService, cfg.SessionCookieSecure)
+	server.Handler = router.New(userHandler)
 
 	log.Print("PostgreSQL connected")
 	log.Printf("HTTP server listening on %s", listener.Addr())

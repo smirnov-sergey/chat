@@ -17,20 +17,9 @@ import (
 	"chat/internal/service"
 )
 
-type fakeUserLoginService func(context.Context, string, string) (*service.UserSession, error)
-
-func (fake fakeUserLoginService) Login(ctx context.Context, username, password string) (*service.UserSession, error) {
-	return fake(ctx, username, password)
-}
-
-var (
-	_ handlers.UserLoginService = fakeUserLoginService(nil)
-	_ handlers.UserLoginService = (*service.UserService)(nil)
-)
-
 const loginBody = `{"username":" IVAN ","password":"  LongPassword123!  "}`
 
-func TestUserLoginHandler(t *testing.T) {
+func TestUserHandlerLogin(t *testing.T) {
 	for _, secure := range []bool{false, true} {
 		t.Run(fmt.Sprintf("secure_%v", secure), func(t *testing.T) {
 			now := time.Date(2026, 11, 16, 12, 0, 0, 0, time.UTC)
@@ -39,7 +28,7 @@ func TestUserLoginHandler(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPost, "/auth/login", strings.NewReader(loginBody))
 			req.Header.Set("Content-Type", "application/json; charset=utf-8")
 			calls := 0
-			login := fakeUserLoginService(func(ctx context.Context, username, password string) (*service.UserSession, error) {
+			login := fakeUserService{login: func(ctx context.Context, username, password string) (*service.UserSession, error) {
 				calls++
 				if ctx != req.Context() || username != " IVAN " || password != "  LongPassword123!  " {
 					t.Fatal("service must receive the request context and unchanged input fields")
@@ -48,9 +37,9 @@ func TestUserLoginHandler(t *testing.T) {
 					User:  &user.User{ID: 42, Username: "ivan", Name: "Иван", PasswordHash: "private-password-hash", CreatedAt: localTime, UpdatedAt: localTime},
 					Token: &session.Token{Value: token, ExpiresAt: now.Add(7 * 24 * time.Hour)},
 				}, nil
-			})
+			}}
 			rec := httptest.NewRecorder()
-			handlers.NewUserLoginHandler(login, secure).Login(rec, req)
+			handlers.NewUserHandler(login, secure).Login(rec, req)
 			if calls != 1 || rec.Code != http.StatusOK {
 				t.Fatalf("calls = %d, status = %d; want 1, 200", calls, rec.Code)
 			}
@@ -84,7 +73,7 @@ func TestUserLoginHandler(t *testing.T) {
 	}
 }
 
-func TestUserLoginHandlerRejectsInvalidRequests(t *testing.T) {
+func TestUserHandlerLoginRejectsInvalidRequests(t *testing.T) {
 	for _, tt := range []struct {
 		name        string
 		contentType string
@@ -106,16 +95,16 @@ func TestUserLoginHandlerRejectsInvalidRequests(t *testing.T) {
 		{"oversized trailing whitespace", "application/json", loginBody + strings.Repeat(" ", 4097), http.StatusRequestEntityTooLarge},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			login := fakeUserLoginService(func(context.Context, string, string) (*service.UserSession, error) {
+			login := fakeUserService{login: func(context.Context, string, string) (*service.UserSession, error) {
 				t.Fatal("service must not be called for invalid requests")
 				return nil, nil
-			})
+			}}
 			req := httptest.NewRequest(http.MethodPost, "/auth/login", strings.NewReader(tt.body))
 			if tt.contentType != "" {
 				req.Header.Set("Content-Type", tt.contentType)
 			}
 			rec := httptest.NewRecorder()
-			handlers.NewUserLoginHandler(login, true).Login(rec, req)
+			handlers.NewUserHandler(login, true).Login(rec, req)
 			if rec.Code != tt.status {
 				t.Fatalf("status = %d, want %d", rec.Code, tt.status)
 			}
@@ -124,7 +113,7 @@ func TestUserLoginHandlerRejectsInvalidRequests(t *testing.T) {
 	}
 }
 
-func TestUserLoginHandlerServiceErrors(t *testing.T) {
+func TestUserHandlerLoginServiceErrors(t *testing.T) {
 	for _, tt := range []struct {
 		name    string
 		err     error
@@ -135,13 +124,13 @@ func TestUserLoginHandlerServiceErrors(t *testing.T) {
 		{"unexpected error", errors.New("private database error"), http.StatusInternalServerError, "internal server error"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			login := fakeUserLoginService(func(context.Context, string, string) (*service.UserSession, error) {
+			login := fakeUserService{login: func(context.Context, string, string) (*service.UserSession, error) {
 				return nil, fmt.Errorf("login failed: %w", tt.err)
-			})
+			}}
 			req := httptest.NewRequest(http.MethodPost, "/auth/login", strings.NewReader(loginBody))
 			req.Header.Set("Content-Type", "application/json")
 			rec := httptest.NewRecorder()
-			handlers.NewUserLoginHandler(login, true).Login(rec, req)
+			handlers.NewUserHandler(login, true).Login(rec, req)
 			if rec.Code != tt.status {
 				t.Fatalf("status = %d, want %d", rec.Code, tt.status)
 			}

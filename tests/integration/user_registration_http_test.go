@@ -47,7 +47,7 @@ func TestUserRegistrationHTTP(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	h := router.New(handlers.NewUserRegistrationHandler(users, false))
+	h := router.New(handlers.NewUserHandler(users, false))
 	const body = `{"username":" IVAN ","name":" Иван Петров ","password":"long personal password"}`
 	register := func() *httptest.ResponseRecorder {
 		req := httptest.NewRequest(http.MethodPost, "/auth/register", strings.NewReader(body)).WithContext(ctx)
