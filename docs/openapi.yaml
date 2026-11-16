@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: Chat API
-  description: HTTP API проекта Chat. Доступны проверка работоспособности, регистрация и вход пользователя.
+  description: HTTP API проекта Chat. Доступны проверка работоспособности, регистрация, вход и чтение собственного профиля.
   version: 0.1.0
 
 servers:
@@ -217,7 +217,94 @@ paths:
               example:
                 error: internal server error
 
+  /users/{id}:
+    get:
+      summary: Получение пользователя по ID
+      description: |
+        Требует действующую сессию в cookie chat_session, полученную при
+        регистрации или входе. Пока разрешено читать только собственный профиль:
+        ID из URL должен совпадать с ID пользователя проверенной сессии.
+        Запрос чужого ID отклоняется без чтения чужой записи.
+
+        Чтение не изменяет профиль, не продлевает сессию и не выдаёт новую cookie.
+        Пароль, его хеш и токен сессии в JSON не возвращаются.
+        Сессия проверяется до разбора ID: без действующей сессии возвращается 401.
+      operationId: getUserByID
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Положительный ID пользователя; доступен только собственный профиль.
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+            maximum: 9223372036854775807
+          example: 42
+      responses:
+        '200':
+          description: Профиль пользователя из действующей сессии.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '400':
+          description: ID не является положительным целым числом в диапазоне int64.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: invalid user ID
+        '401':
+          description: Cookie отсутствует, токен некорректен либо сессия истекла или отозвана.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: invalid or expired session
+        '403':
+          description: ID из URL не совпадает с ID пользователя сессии.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: access denied
+        '404':
+          description: Запись пользователя с собственным ID не найдена.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: user not found
+        '500':
+          description: Внутренняя ошибка. Технические подробности клиенту не возвращаются.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: internal server error
+
 components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: chat_session
+      description: |
+        Сессионная cookie устанавливается сервером при регистрации или входе.
+        Сессия действует 7 дней без продления по активности.
   schemas:
     UserRegistrationRequest:
       type: object
