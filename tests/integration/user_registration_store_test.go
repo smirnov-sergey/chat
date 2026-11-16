@@ -16,9 +16,12 @@ import (
 	"chat/internal/model/session"
 	"chat/internal/model/user"
 	"chat/internal/repository"
+	"chat/internal/service"
 
 	"github.com/jackc/pgx/v5/pgconn"
 )
+
+var _ service.UserRegistrationStore = (*repository.UserRegistrationStore)(nil)
 
 func TestUserRegistrationStore(t *testing.T) {
 	db := integrationDB(t)

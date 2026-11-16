@@ -36,25 +36,13 @@ func (s *SessionService) Create(ctx context.Context, userID int64) (*session.Tok
 		return nil, err
 	}
 
-	raw := make([]byte, sessionTokenLength)
-	rand.Read(raw)
-	hash := sha256.Sum256(raw)
-	now := time.Now().UTC()
-	value := &session.Session{
-		TokenHash: hash[:],
-		UserID:    userID,
-		CreatedAt: now,
-		ExpiresAt: now.Add(s.lifetime),
-	}
+	value, token := newSession(userID, time.Now().UTC(), s.lifetime)
 
 	if err := s.repository.Create(ctx, value); err != nil {
 		return nil, err
 	}
 
-	return &session.Token{
-		Value:     base64.RawURLEncoding.EncodeToString(raw),
-		ExpiresAt: value.ExpiresAt,
-	}, nil
+	return token, nil
 }
 
 func (s *SessionService) Authenticate(ctx context.Context, token string) (*session.Session, error) {
@@ -94,6 +82,27 @@ func (s *SessionService) Logout(ctx context.Context, token string) error {
 	}
 
 	return s.repository.DeleteByTokenHash(ctx, hash)
+}
+
+func newSession(userID int64, now time.Time, lifetime time.Duration) (*session.Session, *session.Token) {
+	raw := make([]byte, sessionTokenLength)
+	rand.Read(raw)
+	hash := sha256.Sum256(raw)
+	expiresAt := now.Add(lifetime)
+
+	value := &session.Session{
+		TokenHash: hash[:],
+		UserID:    userID,
+		CreatedAt: now,
+		ExpiresAt: expiresAt,
+	}
+
+	token := &session.Token{
+		Value:     base64.RawURLEncoding.EncodeToString(raw),
+		ExpiresAt: expiresAt,
+	}
+
+	return value, token
 }
 
 func sessionTokenHash(token string) ([]byte, bool) {
