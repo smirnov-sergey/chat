@@ -33,11 +33,14 @@ var _ handlers.UserService = fakeUserService{}
 
 func newRouter(t *testing.T) http.Handler {
 	t.Helper()
-	registration := fakeUserService{register: func(context.Context, string, string, string) (*service.UserSession, error) {
+	users := fakeUserService{register: func(context.Context, string, string, string) (*service.UserSession, error) {
 		t.Fatal("registration must not be called for this request")
 		return nil, nil
+	}, login: func(context.Context, string, string) (*service.UserSession, error) {
+		t.Fatal("login must not be called for this request")
+		return nil, nil
 	}}
-	return router.New(handlers.NewUserHandler(registration, true))
+	return router.New(handlers.NewUserHandler(users, true))
 }
 
 func TestHealth(t *testing.T) {
@@ -69,6 +72,7 @@ func TestRouterRejectsUnsupportedRequests(t *testing.T) {
 		{"unknown path", http.MethodGet, "/missing", http.StatusNotFound},
 		{"unsupported method", http.MethodPost, "/health", http.StatusMethodNotAllowed},
 		{"registration requires POST", http.MethodGet, "/auth/register", http.StatusMethodNotAllowed},
+		{"login requires POST", http.MethodGet, "/auth/login", http.StatusMethodNotAllowed},
 	}
 
 	for _, tt := range tests {
@@ -112,27 +116,61 @@ func TestRegistrationRoute(t *testing.T) {
 	}
 }
 
-func TestRegistrationRejectsCrossOrigin(t *testing.T) {
-	for _, headers := range []map[string]string{
-		{"Origin": "https://evil.example"},
-		{"Origin": "null"},
-		{"Sec-Fetch-Site": "cross-site"},
-	} {
-		req := httptest.NewRequest(http.MethodPost, "http://chat.local/auth/register", strings.NewReader(`{}`))
-		req.Header.Set("Content-Type", "application/json")
-		for name, value := range headers {
-			req.Header.Set(name, value)
-		}
-		rec := httptest.NewRecorder()
-		newRouter(t).ServeHTTP(rec, req)
-		if rec.Code != http.StatusForbidden || rec.Header().Get("Content-Type") != "application/json" || rec.Header().Get("Set-Cookie") != "" {
-			t.Fatalf("cross-origin response status = %d, headers = %v; want JSON 403 without cookie", rec.Code, rec.Header())
-		}
-		var body struct {
-			Error string `json:"error"`
-		}
-		if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil || body.Error != "cross-origin request blocked" {
-			t.Fatalf("unexpected rejection body: %q", rec.Body.String())
-		}
+func TestLoginRoute(t *testing.T) {
+	for _, origin := range []string{"", "http://chat.local"} {
+		t.Run(origin, func(t *testing.T) {
+			calls := 0
+			users := fakeUserService{login: func(_ context.Context, username, password string) (*service.UserSession, error) {
+				calls++
+				if username != "ivan" || password != "long password phrase" {
+					t.Fatal("login route must pass the submitted credentials to the service")
+				}
+				return &service.UserSession{
+					User:  &user.User{ID: 42, Username: "ivan", Name: "Иван"},
+					Token: &session.Token{Value: "test-token", ExpiresAt: time.Now().Add(time.Hour)},
+				}, nil
+			}}
+			h := router.New(handlers.NewUserHandler(users, true))
+			req := httptest.NewRequest(http.MethodPost, "http://chat.local/auth/login",
+				strings.NewReader(`{"username":"ivan","password":"long password phrase"}`))
+			req.Header.Set("Content-Type", "application/json")
+			if origin != "" {
+				req.Header.Set("Origin", origin)
+			}
+			rec := httptest.NewRecorder()
+			h.ServeHTTP(rec, req)
+			if rec.Code != http.StatusOK || calls != 1 || rec.Header().Get("Set-Cookie") == "" {
+				t.Fatalf("status = %d, service calls = %d; want 200, 1 and a session cookie", rec.Code, calls)
+			}
+		})
+	}
+}
+
+func TestAuthRoutesRejectCrossOrigin(t *testing.T) {
+	for _, path := range []string{"/auth/register", "/auth/login"} {
+		t.Run(path, func(t *testing.T) {
+			for _, headers := range []map[string]string{
+				{"Origin": "https://evil.example"},
+				{"Origin": "null"},
+				{"Sec-Fetch-Site": "cross-site"},
+			} {
+				req := httptest.NewRequest(http.MethodPost, "http://chat.local"+path, strings.NewReader(`{}`))
+				req.Header.Set("Content-Type", "application/json")
+				for name, value := range headers {
+					req.Header.Set(name, value)
+				}
+				rec := httptest.NewRecorder()
+				newRouter(t).ServeHTTP(rec, req)
+				if rec.Code != http.StatusForbidden || rec.Header().Get("Content-Type") != "application/json" || rec.Header().Get("Set-Cookie") != "" {
+					t.Fatalf("cross-origin response status = %d, headers = %v; want JSON 403 without cookie", rec.Code, rec.Header())
+				}
+				var body struct {
+					Error string `json:"error"`
+				}
+				if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil || body.Error != "cross-origin request blocked" {
+					t.Fatalf("unexpected rejection body: %q", rec.Body.String())
+				}
+			}
+		})
 	}
 }
