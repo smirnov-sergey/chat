@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: Chat API
-  description: HTTP API проекта Chat. Доступны проверка работоспособности, регистрация, вход и чтение собственного профиля.
+  description: HTTP API проекта Chat. Доступны проверка работоспособности, регистрация, вход, выход и чтение собственного профиля.
   version: 0.1.0
 
 servers:
@@ -210,6 +210,60 @@ paths:
                 error: Content-Type must be application/json
         '500':
           description: Внутренняя ошибка. Технические подробности клиенту не возвращаются.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: internal server error
+
+  /auth/logout:
+    post:
+      summary: Выход пользователя
+      description: |
+        Удаляет сессию, определённую cookie chat_session, и очищает эту cookie.
+        Остальные сессии пользователя сохраняются. Тело запроса не требуется.
+
+        Повторный выход, отсутствие cookie, некорректный токен, истёкшая или уже
+        удалённая сессия также дают 204 с очисткой cookie. Предварительная проверка
+        действующей сессии не требуется. Тело ответа отсутствует.
+
+        Запросы браузера с чужого сайта отклоняются до удаления сессии.
+        Для браузерного клиента UI и API должны иметь один origin;
+        CORS сейчас не настроен. Запросы CLI без заголовков Origin
+        и Sec-Fetch-Site допускаются.
+      operationId: logoutUser
+      security:
+        - sessionCookie: []
+        - {}
+      responses:
+        '204':
+          description: Выход завершён; cookie сессии удаляется. Тело ответа отсутствует.
+          headers:
+            Set-Cookie:
+              description: |
+                Очищает chat_session: пустое значение, Path=/, Max-Age=0
+                и Expires в прошлом. Атрибуты HttpOnly и SameSite=Lax сохраняются.
+                Secure управляется SESSION_COOKIE_SECURE, как при входе.
+              schema:
+                type: string
+              example: 'chat_session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT; Max-Age=0; HttpOnly; SameSite=Lax'
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+        '403':
+          description: Запрос с чужого сайта отклонён. Сессия не удаляется.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: cross-origin request blocked
+        '500':
+          description: |
+            Внутренняя ошибка. Если удаление сессии не удалось, cookie не очищается.
+            Технические подробности клиенту не возвращаются.
           content:
             application/json:
               schema:
