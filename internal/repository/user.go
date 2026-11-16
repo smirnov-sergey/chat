@@ -9,11 +9,15 @@ import (
 	"chat/internal/model/user"
 )
 
-type UserRepository struct {
-	db *sql.DB
+type rowQueryer interface {
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
 }
 
-func NewUserRepository(db *sql.DB) *UserRepository {
+type UserRepository struct {
+	db rowQueryer
+}
+
+func NewUserRepository(db rowQueryer) *UserRepository {
 	return &UserRepository{db: db}
 }
 

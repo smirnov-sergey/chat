@@ -9,11 +9,16 @@ import (
 	"chat/internal/model/session"
 )
 
-type SessionRepository struct {
-	db *sql.DB
+type sessionQueryer interface {
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
 }
 
-func NewSessionRepository(db *sql.DB) *SessionRepository {
+type SessionRepository struct {
+	db sessionQueryer
+}
+
+func NewSessionRepository(db sessionQueryer) *SessionRepository {
 	return &SessionRepository{db: db}
 }
 
