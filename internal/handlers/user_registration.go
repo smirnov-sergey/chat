@@ -8,10 +8,7 @@ import (
 	"chat/internal/service"
 )
 
-const (
-	maxRegistrationBodyBytes = 4 << 10
-	sessionCookieName        = "chat_session"
-)
+const maxRegistrationBodyBytes = 4 << 10
 
 type UserRegistrationService interface {
 	Register(ctx context.Context, username, name, password string) (*service.UserSession, error)
@@ -46,15 +43,7 @@ func (h *UserRegistrationHandler) Register(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	http.SetCookie(w, &http.Cookie{
-		Name:     sessionCookieName,
-		Value:    result.Token.Value,
-		Path:     "/",
-		Expires:  result.Token.ExpiresAt,
-		HttpOnly: true,
-		Secure:   h.secureCookies,
-		SameSite: http.SameSiteLaxMode,
-	})
+	setSessionCookie(w, result.Token, h.secureCookies)
 
 	writeJSON(w, http.StatusCreated, dto.ToUserResponse(result.User))
 }
