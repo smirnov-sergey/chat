@@ -1,0 +1,170 @@
+package handlers_test
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+	"time"
+
+	"chat/internal/handlers"
+	"chat/internal/model/session"
+	"chat/internal/model/user"
+	"chat/internal/service"
+	"chat/internal/validation"
+)
+
+type fakeUserRegistrationService func(context.Context, string, string, string) (*service.UserRegistration, error)
+
+func (fake fakeUserRegistrationService) Register(ctx context.Context, username, name, password string) (*service.UserRegistration, error) {
+	return fake(ctx, username, name, password)
+}
+
+var (
+	_ handlers.UserRegistrationService = fakeUserRegistrationService(nil)
+	_ handlers.UserRegistrationService = (*service.UserRegistrationService)(nil)
+)
+
+const registrationBody = `{"username":" IVAN ","name":" Иван ","password":"  LongPassword123!  "}`
+
+func TestUserRegistrationHandler(t *testing.T) {
+	for _, secure := range []bool{false, true} {
+		t.Run(fmt.Sprintf("secure_%v", secure), func(t *testing.T) {
+			now := time.Date(2026, 11, 16, 12, 0, 0, 0, time.UTC)
+			localTime := now.In(time.FixedZone("UTC+3", 3*60*60))
+			const token = "test-session-token"
+			req := httptest.NewRequest(http.MethodPost, "/auth/register", strings.NewReader(registrationBody))
+			req.Header.Set("Content-Type", "application/json; charset=utf-8")
+			calls := 0
+			registration := fakeUserRegistrationService(func(ctx context.Context, username, name, password string) (*service.UserRegistration, error) {
+				calls++
+				if ctx != req.Context() || username != " IVAN " || name != " Иван " || password != "  LongPassword123!  " {
+					t.Fatal("service must receive the request context and unchanged input fields")
+				}
+				return &service.UserRegistration{
+					User:  &user.User{ID: 42, Username: "ivan", Name: "Иван", CreatedAt: localTime, UpdatedAt: localTime},
+					Token: &session.Token{Value: token, ExpiresAt: now.Add(7 * 24 * time.Hour)},
+				}, nil
+			})
+			rec := httptest.NewRecorder()
+			handlers.NewUserRegistrationHandler(registration, secure).Register(rec, req)
+			if calls != 1 || rec.Code != http.StatusCreated {
+				t.Fatalf("calls = %d, status = %d; want 1, 201", calls, rec.Code)
+			}
+			if rec.Header().Get("Content-Type") != "application/json" || rec.Header().Get("Cache-Control") != "no-store" {
+				t.Fatal("expected a JSON response with caching disabled")
+			}
+			var body map[string]any
+			if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+				t.Fatal(err)
+			}
+			if len(body) != 5 || body["id"] != float64(42) || body["username"] != "ivan" || body["name"] != "Иван" ||
+				body["created_at"] != now.Format(time.RFC3339) || body["updated_at"] != now.Format(time.RFC3339) {
+				t.Fatalf("unexpected user response: %v", body)
+			}
+			if strings.Contains(rec.Body.String(), token) || strings.Contains(rec.Body.String(), "LongPassword") {
+				t.Fatal("JSON must not contain the session token or password")
+			}
+			response := rec.Result()
+			defer response.Body.Close()
+			cookies := response.Cookies()
+			if len(cookies) != 1 {
+				t.Fatalf("cookie count = %d, want 1", len(cookies))
+			}
+			cookie := cookies[0]
+			if cookie.Name != "chat_session" || cookie.Value != token || cookie.Path != "/" || cookie.Domain != "" ||
+				!cookie.HttpOnly || cookie.Secure != secure || cookie.SameSite != http.SameSiteLaxMode ||
+				!cookie.Expires.Equal(now.Add(7*24*time.Hour)) {
+				t.Fatalf("unexpected session cookie: %+v", cookie)
+			}
+		})
+	}
+}
+
+func TestUserRegistrationHandlerRejectsInvalidRequests(t *testing.T) {
+	for _, tt := range []struct {
+		name        string
+		contentType string
+		body        string
+		status      int
+	}{
+		{"missing content type", "", registrationBody, http.StatusUnsupportedMediaType},
+		{"unsupported content type", "text/plain", registrationBody, http.StatusUnsupportedMediaType},
+		{"malformed content type", "application/json; charset", registrationBody, http.StatusUnsupportedMediaType},
+		{"empty body", "application/json", "", http.StatusBadRequest},
+		{"malformed JSON", "application/json", "{", http.StatusBadRequest},
+		{"null", "application/json", "null", http.StatusBadRequest},
+		{"array", "application/json", "[]", http.StatusBadRequest},
+		{"wrong field type", "application/json", `{"username":42}`, http.StatusBadRequest},
+		{"unknown field", "application/json", `{"username":"ivan","admin":true}`, http.StatusBadRequest},
+		{"multiple JSON values", "application/json", registrationBody + `{}`, http.StatusBadRequest},
+		{"trailing garbage", "application/json", registrationBody + `garbage`, http.StatusBadRequest},
+		{"oversized body", "application/json", strings.Repeat(" ", 4097) + registrationBody, http.StatusRequestEntityTooLarge},
+		{"oversized trailing whitespace", "application/json", registrationBody + strings.Repeat(" ", 4097), http.StatusRequestEntityTooLarge},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			registration := fakeUserRegistrationService(func(context.Context, string, string, string) (*service.UserRegistration, error) {
+				t.Fatal("service must not be called for invalid requests")
+				return nil, nil
+			})
+			req := httptest.NewRequest(http.MethodPost, "/auth/register", strings.NewReader(tt.body))
+			if tt.contentType != "" {
+				req.Header.Set("Content-Type", tt.contentType)
+			}
+			rec := httptest.NewRecorder()
+			handlers.NewUserRegistrationHandler(registration, true).Register(rec, req)
+			if rec.Code != tt.status {
+				t.Fatalf("status = %d, want %d", rec.Code, tt.status)
+			}
+			assertRegistrationError(t, rec)
+		})
+	}
+}
+
+func TestUserRegistrationHandlerServiceErrors(t *testing.T) {
+	for _, tt := range []struct {
+		name    string
+		err     error
+		status  int
+		message string
+	}{
+		{"username validation", validation.ErrInvalidUsername, http.StatusBadRequest, validation.ErrInvalidUsername.Error()},
+		{"name validation", validation.ErrInvalidName, http.StatusBadRequest, validation.ErrInvalidName.Error()},
+		{"password validation", validation.ErrInvalidPassword, http.StatusBadRequest, validation.ErrInvalidPassword.Error()},
+		{"username taken", user.ErrUsernameTaken, http.StatusConflict, user.ErrUsernameTaken.Error()},
+		{"unexpected error", errors.New("private database error"), http.StatusInternalServerError, "internal server error"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			registration := fakeUserRegistrationService(func(context.Context, string, string, string) (*service.UserRegistration, error) {
+				return nil, fmt.Errorf("registration failed: %w", tt.err)
+			})
+			req := httptest.NewRequest(http.MethodPost, "/auth/register", strings.NewReader(registrationBody))
+			req.Header.Set("Content-Type", "application/json")
+			rec := httptest.NewRecorder()
+			handlers.NewUserRegistrationHandler(registration, true).Register(rec, req)
+			if rec.Code != tt.status {
+				t.Fatalf("status = %d, want %d", rec.Code, tt.status)
+			}
+			body := assertRegistrationError(t, rec)
+			if body.Error != tt.message {
+				t.Fatalf("error message = %q, want %q", body.Error, tt.message)
+			}
+		})
+	}
+}
+
+func assertRegistrationError(t *testing.T, rec *httptest.ResponseRecorder) struct{ Error string } {
+	t.Helper()
+	if rec.Header().Get("Content-Type") != "application/json" || rec.Header().Get("Set-Cookie") != "" {
+		t.Fatal("errors must be JSON and must not issue a session cookie")
+	}
+	var body struct{ Error string }
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil || body.Error == "" {
+		t.Fatalf("expected a JSON error response, got %q", rec.Body.String())
+	}
+	return body
+}

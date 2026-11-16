@@ -4,7 +4,13 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+
+	"chat/internal/dto"
 )
+
+func writeError(w http.ResponseWriter, status int, err error) {
+	writeJSON(w, status, dto.ErrorResponse{Error: err.Error()})
+}
 
 func writeJSON(w http.ResponseWriter, status int, response any) {
 	data, err := json.Marshal(response)

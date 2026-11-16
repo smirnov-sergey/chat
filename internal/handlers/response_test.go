@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"chat/internal/dto"
 )
 
 func TestWriteJSON(t *testing.T) {
@@ -18,7 +20,7 @@ func TestWriteJSON(t *testing.T) {
 		{
 			name:     "success",
 			status:   http.StatusOK,
-			response: healthResponse{Status: "ok"},
+			response: dto.HealthResponse{Status: "ok"},
 			wantCode: http.StatusOK,
 			wantBody: "{\"status\":\"ok\"}\n",
 		},
@@ -76,7 +78,7 @@ func (w *failedResponseWriter) Write([]byte) (int, error) {
 
 func TestWriteJSONDoesNotRetryAfterWriteError(t *testing.T) {
 	w := &failedResponseWriter{header: make(http.Header)}
-	writeJSON(w, http.StatusOK, healthResponse{Status: "ok"})
+	writeJSON(w, http.StatusOK, dto.HealthResponse{Status: "ok"})
 	if w.status != http.StatusOK || w.headerCalls != 1 || w.writeCalls != 1 {
 		t.Fatalf("status = %d, header calls = %d, write calls = %d; want 200, 1, 1",
 			w.status, w.headerCalls, w.writeCalls)
