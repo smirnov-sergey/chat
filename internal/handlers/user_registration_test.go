@@ -48,6 +48,44 @@ var (
 
 const registrationBody = `{"username":" IVAN ","name":" Иван ","password":"  LongPassword123!  "}`
 
+func TestUserHandlerRegisterBodySizeBoundary(t *testing.T) {
+	for _, size := range []int{4096, 4097} {
+		for _, paddingPosition := range []string{"leading", "trailing"} {
+			t.Run(fmt.Sprintf("%d_bytes_%s_padding", size, paddingPosition), func(t *testing.T) {
+				padding := strings.Repeat(" ", size-len(registrationBody))
+				body := registrationBody + padding
+				if paddingPosition == "leading" {
+					body = padding + registrationBody
+				}
+				calls := 0
+				users := fakeUserService{register: func(context.Context, string, string, string) (*service.UserSession, error) {
+					calls++
+					return &service.UserSession{
+						User:  &user.User{ID: 1, Username: "ivan", Name: "Иван"},
+						Token: &session.Token{Value: "test-session-token", ExpiresAt: time.Date(2026, 11, 24, 12, 0, 0, 0, time.UTC)},
+					}, nil
+				}}
+				req := httptest.NewRequest(http.MethodPost, "/auth/register", strings.NewReader(body))
+				req.Header.Set("Content-Type", "application/json")
+				rec := httptest.NewRecorder()
+				handlers.NewUserHandler(users, false).Register(rec, req)
+				if size == 4096 {
+					if rec.Code != http.StatusCreated || calls != 1 {
+						t.Fatalf("4096-byte body: status=%d, service calls=%d; want 201 and 1", rec.Code, calls)
+					}
+					return
+				}
+				if rec.Code != http.StatusRequestEntityTooLarge || calls != 0 {
+					t.Fatalf("4097-byte body: status=%d, service calls=%d; want 413 and 0", rec.Code, calls)
+				}
+				if body := assertRegistrationError(t, rec); body.Error != "request body too large" {
+					t.Fatalf("error=%q, want request body too large", body.Error)
+				}
+			})
+		}
+	}
+}
+
 func TestUserHandlerRegister(t *testing.T) {
 	for _, secure := range []bool{false, true} {
 		t.Run(fmt.Sprintf("secure_%v", secure), func(t *testing.T) {
