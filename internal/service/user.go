@@ -125,25 +125,23 @@ func (s *UserService) Login(ctx context.Context, username, password string) (*Us
 	}
 
 	u, err := s.repository.GetByUsername(ctx, username)
-	if errors.Is(err, user.ErrNotFound) {
-		return nil, user.ErrInvalidCredentials
-	}
-
-	if err != nil {
+	if err != nil && !errors.Is(err, user.ErrNotFound) {
 		return nil, fmt.Errorf("find user for login: %w", err)
-	}
-
-	if u.PasswordHash == "" {
-		return nil, user.ErrInvalidCredentials
 	}
 
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 
-	matches, err := s.passwords.Verify(password, u.PasswordHash)
+	var matches bool
+	if errors.Is(err, user.ErrNotFound) || u.PasswordHash == "" {
+		_, err = s.passwords.Hash(password)
+	} else {
+		matches, err = s.passwords.Verify(password, u.PasswordHash)
+	}
+
 	if err != nil {
-		return nil, fmt.Errorf("verify password: %w", err)
+		return nil, fmt.Errorf("check password: %w", err)
 	}
 
 	if err := ctx.Err(); err != nil {

@@ -87,7 +87,7 @@ func TestUserServiceLogin(t *testing.T) {
 				calls = append(calls, "session")
 				return token, nil
 			}}
-			got, err := newLoginUserService(t, repo, verifier, sessions).Login(ctx, tt.username, tt.password)
+			got, err := newLoginUserService(t, repo, fakePasswordService{verify: verifier}, sessions).Login(ctx, tt.username, tt.password)
 			if err != nil || got == nil || got.User != u || got.Token != token {
 				t.Fatalf("Login error = %v; want the authenticated user and created token", err)
 			}
@@ -101,6 +101,7 @@ func TestUserServiceLogin(t *testing.T) {
 func TestUserServiceLoginFailures(t *testing.T) {
 	lookupError := errors.New("database unavailable")
 	verificationError := errors.New("unsupported hash")
+	hashError := errors.New("hashing failed")
 	sessionError := errors.New("session insert failed")
 	for _, tt := range []struct {
 		name              string
@@ -109,6 +110,7 @@ func TestUserServiceLoginFailures(t *testing.T) {
 		hash              string
 		lookupError       error
 		verificationError error
+		hashError         error
 		sessionError      error
 		matches           bool
 		want              error
@@ -119,9 +121,10 @@ func TestUserServiceLoginFailures(t *testing.T) {
 		{name: "empty password", username: "ivan", want: user.ErrInvalidCredentials},
 		{name: "invalid UTF-8 password", username: "ivan", password: "password\xff", want: user.ErrInvalidCredentials},
 		{name: "oversized password", username: "ivan", password: strings.Repeat("a", 129), want: user.ErrInvalidCredentials},
-		{name: "missing user", username: "ivan", password: testPassword, lookupError: fmt.Errorf("lookup: %w", user.ErrNotFound), want: user.ErrInvalidCredentials, wantCalls: "lookup"},
+		{name: "missing user", username: "ivan", password: testPassword, lookupError: fmt.Errorf("lookup: %w", user.ErrNotFound), matches: true, want: user.ErrInvalidCredentials, wantCalls: "lookup,hash"},
 		{name: "lookup error", username: "ivan", password: testPassword, lookupError: lookupError, want: lookupError, wantCalls: "lookup"},
-		{name: "legacy user without password", username: "ivan", password: testPassword, want: user.ErrInvalidCredentials, wantCalls: "lookup"},
+		{name: "legacy user without password", username: "ivan", password: testPassword, matches: true, want: user.ErrInvalidCredentials, wantCalls: "lookup,hash"},
+		{name: "hash error for missing user", username: "ivan", password: testPassword, lookupError: user.ErrNotFound, hashError: hashError, want: hashError, wantCalls: "lookup,hash"},
 		{name: "wrong password", username: "ivan", password: testPassword, hash: testPasswordHash, want: user.ErrInvalidCredentials, wantCalls: "lookup,verify"},
 		{name: "verification error", username: "ivan", password: testPassword, hash: testPasswordHash, verificationError: verificationError, want: verificationError, wantCalls: "lookup,verify"},
 		{name: "session error", username: "ivan", password: testPassword, hash: testPasswordHash, matches: true, sessionError: sessionError, want: sessionError, wantCalls: "lookup,verify,session"},
@@ -139,11 +142,21 @@ func TestUserServiceLoginFailures(t *testing.T) {
 				calls = append(calls, "verify")
 				return tt.matches, tt.verificationError
 			})
+			passwords := fakePasswordService{
+				hash: func(password string) (string, error) {
+					calls = append(calls, "hash")
+					if password != tt.password {
+						t.Fatal("fallback hashing must receive the unchanged password")
+					}
+					return testPasswordHash, tt.hashError
+				},
+				verify: verifier,
+			}
 			sessions := fakeUserSessions{create: func(context.Context, int64) (*session.Token, error) {
 				calls = append(calls, "session")
 				return nil, tt.sessionError
 			}}
-			got, err := newLoginUserService(t, repo, verifier, sessions).Login(t.Context(), tt.username, tt.password)
+			got, err := newLoginUserService(t, repo, passwords, sessions).Login(t.Context(), tt.username, tt.password)
 			if got != nil || !errors.Is(err, tt.want) {
 				t.Fatalf("Login error = %v, want nil result and %v", err, tt.want)
 			}
@@ -179,7 +192,7 @@ func TestUserServiceLoginCancellation(t *testing.T) {
 				t.Fatal("canceled login must not create a session")
 				return nil, nil
 			}}
-			got, err := newLoginUserService(t, repo, verifier, sessions).Login(ctx, "ivan", testPassword)
+			got, err := newLoginUserService(t, repo, fakePasswordService{verify: verifier}, sessions).Login(ctx, "ivan", testPassword)
 			if got != nil || !errors.Is(err, context.Canceled) {
 				t.Fatalf("Login error = %v, want nil result and context.Canceled", err)
 			}
@@ -191,11 +204,51 @@ func TestUserServiceLoginCancellation(t *testing.T) {
 	}
 }
 
-func newLoginUserService(t *testing.T, repo fakeUserRepository, verifier fakePasswordVerifier, sessions fakeUserSessions) *service.UserService {
+func newLoginUserService(t *testing.T, repo fakeUserRepository, passwords fakePasswordService, sessions fakeUserSessions) *service.UserService {
 	t.Helper()
-	s, err := service.NewUserService(repo, nil, fakePasswordService{verify: verifier}, sessions, 7*24*time.Hour)
+	s, err := service.NewUserService(repo, nil, passwords, sessions, 7*24*time.Hour)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return s
+}
+
+func TestUserServiceLoginMissingCredentialsCancellation(t *testing.T) {
+	for _, legacyUser := range []bool{false, true} {
+		for _, stage := range []string{"lookup", "hash"} {
+			t.Run(fmt.Sprintf("legacy_%v/during_%s", legacyUser, stage), func(t *testing.T) {
+				ctx, cancel := context.WithCancel(t.Context())
+				defer cancel()
+				repo := fakeUserRepository{getByUsername: func(context.Context, string) (*user.User, error) {
+					if stage == "lookup" {
+						cancel()
+					}
+					if legacyUser {
+						return &user.User{ID: 42}, nil
+					}
+					return nil, user.ErrNotFound
+				}}
+				hashCalls := 0
+				passwords := fakePasswordService{hash: func(string) (string, error) {
+					hashCalls++
+					if stage == "lookup" {
+						t.Fatal("cancellation during lookup must stop the fallback hash")
+					}
+					cancel()
+					return testPasswordHash, nil
+				}}
+				sessions := fakeUserSessions{create: func(context.Context, int64) (*session.Token, error) {
+					t.Fatal("missing credentials must never create a session")
+					return nil, nil
+				}}
+				got, err := newLoginUserService(t, repo, passwords, sessions).Login(ctx, "ivan", testPassword)
+				if got != nil || !errors.Is(err, context.Canceled) {
+					t.Fatalf("Login error = %v, want nil result and context.Canceled", err)
+				}
+				if stage == "hash" && hashCalls != 1 {
+					t.Fatalf("hash calls = %d, want 1", hashCalls)
+				}
+			})
+		}
+	}
 }
