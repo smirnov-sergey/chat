@@ -3,8 +3,17 @@ package handlers
 import (
 	"context"
 	"net/http"
+	"net/netip"
+	"strconv"
+	"time"
 
 	"chat/internal/model/session"
+)
+
+const (
+	loginRequestsPerMinute        = 10
+	registrationRequestsPerMinute = 5
+	maxRateLimitClients           = 10000
 )
 
 type SessionAuthenticator interface {
@@ -19,9 +28,47 @@ func CrossOriginProtectionMiddleware() func(http.Handler) http.Handler {
 	return protection.Handler
 }
 
-func userIDFromContext(ctx context.Context) (int64, bool) {
-	id, ok := ctx.Value(userIDContextKey{}).(int64)
-	return id, ok
+func AuthRateLimitMiddleware() func(http.Handler) http.Handler {
+	login := newRequestLimiter(loginRequestsPerMinute, maxRateLimitClients)
+	registration := newRequestLimiter(registrationRequestsPerMinute, maxRateLimitClients)
+
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			var limiter *requestLimiter
+
+			if r.Method == http.MethodPost {
+				switch r.URL.Path {
+				case "/auth/login":
+					limiter = login
+				case "/auth/register":
+					limiter = registration
+				}
+			}
+
+			if limiter == nil {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			w.Header().Set("Cache-Control", "no-store")
+
+			peer, err := netip.ParseAddrPort(r.RemoteAddr)
+			if err != nil {
+				handleError(w, err)
+				return
+			}
+
+			allowed, retryAfter := limiter.allow(peer.Addr().Unmap(), time.Now())
+			if !allowed {
+				seconds := (retryAfter + time.Second - 1) / time.Second
+				w.Header().Set("Retry-After", strconv.FormatInt(int64(seconds), 10))
+				handleError(w, errTooManyRequests)
+				return
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
 func SessionMiddleware(sessionAuthenticator SessionAuthenticator) func(http.Handler) http.Handler {
@@ -51,4 +98,9 @@ func SessionMiddleware(sessionAuthenticator SessionAuthenticator) func(http.Hand
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
+}
+
+func userIDFromContext(ctx context.Context) (int64, bool) {
+	id, ok := ctx.Value(userIDContextKey{}).(int64)
+	return id, ok
 }

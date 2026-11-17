@@ -50,8 +50,9 @@ func TestUserRegistrationHTTP(t *testing.T) {
 	userHandler := handlers.NewUserHandler(users, false)
 	appRouter := router.New(userHandler)
 	crossOriginProtectionMiddleware := handlers.CrossOriginProtectionMiddleware()
+	authRateLimitMiddleware := handlers.AuthRateLimitMiddleware()
 	sessionMiddleware := handlers.SessionMiddleware(sessions)
-	h := crossOriginProtectionMiddleware(sessionMiddleware(appRouter))
+	h := crossOriginProtectionMiddleware(authRateLimitMiddleware(sessionMiddleware(appRouter)))
 	const body = `{"username":" IVAN ","name":" Иван Петров ","password":"long personal password"}`
 	register := func() *httptest.ResponseRecorder {
 		req := httptest.NewRequest(http.MethodPost, "/auth/register", strings.NewReader(body)).WithContext(ctx)

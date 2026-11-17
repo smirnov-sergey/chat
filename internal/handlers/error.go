@@ -15,6 +15,7 @@ var (
 	errCrossOriginRequest = errors.New("cross-origin request blocked")
 	errInvalidUserID      = errors.New("invalid user ID")
 	errAccessDenied       = errors.New("access denied")
+	errTooManyRequests    = errors.New("too many requests")
 )
 
 func crossOriginDenied(w http.ResponseWriter, _ *http.Request) {
@@ -23,6 +24,8 @@ func crossOriginDenied(w http.ResponseWriter, _ *http.Request) {
 
 func handleError(w http.ResponseWriter, err error) {
 	switch {
+	case errors.Is(err, errTooManyRequests):
+		writeError(w, http.StatusTooManyRequests, errTooManyRequests)
 	case errors.Is(err, user.ErrNotFound):
 		writeError(w, http.StatusNotFound, user.ErrNotFound)
 	case errors.Is(err, errInvalidUserID):

@@ -59,9 +59,12 @@ func Run(ctx context.Context, cfg config.Config) error {
 	appRouter := router.New(userHandler)
 
 	crossOriginProtectionMiddleware := handlers.CrossOriginProtectionMiddleware()
+	authRateLimitMiddleware := handlers.AuthRateLimitMiddleware()
 	sessionMiddleware := handlers.SessionMiddleware(sessionService)
 	newHandler := crossOriginProtectionMiddleware(
-		sessionMiddleware(appRouter),
+		authRateLimitMiddleware(
+			sessionMiddleware(appRouter),
+		),
 	)
 
 	server.Handler = newHandler

@@ -49,8 +49,9 @@ func TestUserProfileHTTP(t *testing.T) {
 	userHandler := handlers.NewUserHandler(users, false)
 	appRouter := router.New(userHandler)
 	crossOriginProtectionMiddleware := handlers.CrossOriginProtectionMiddleware()
+	authRateLimitMiddleware := handlers.AuthRateLimitMiddleware()
 	sessionMiddleware := handlers.SessionMiddleware(sessions)
-	h := crossOriginProtectionMiddleware(sessionMiddleware(appRouter))
+	h := crossOriginProtectionMiddleware(authRateLimitMiddleware(sessionMiddleware(appRouter)))
 	requestProfile := func(id int64, token string) *httptest.ResponseRecorder {
 		req := httptest.NewRequest(http.MethodGet, "/users/"+strconv.FormatInt(id, 10)+"?user_id=999", nil).WithContext(ctx)
 		req.Header.Set("X-User-ID", "999")

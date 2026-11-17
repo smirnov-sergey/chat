@@ -55,8 +55,9 @@ func TestUserLogoutHTTP(t *testing.T) {
 	}
 	appRouter := router.New(handlers.NewUserHandler(users, false))
 	crossOriginProtectionMiddleware := handlers.CrossOriginProtectionMiddleware()
+	authRateLimitMiddleware := handlers.AuthRateLimitMiddleware()
 	sessionMiddleware := handlers.SessionMiddleware(sessions)
-	h := crossOriginProtectionMiddleware(sessionMiddleware(appRouter))
+	h := crossOriginProtectionMiddleware(authRateLimitMiddleware(sessionMiddleware(appRouter)))
 	request := func(method, path, token string) *httptest.ResponseRecorder {
 		req := httptest.NewRequest(method, path, nil).WithContext(ctx)
 		if token != "" {

@@ -237,8 +237,9 @@ func TestUserProfileIDAccess(t *testing.T) {
 func newTestHTTPHandler(userHandler *handlers.UserHandler, sessions handlers.SessionAuthenticator) http.Handler {
 	appRouter := router.New(userHandler)
 	crossOriginProtectionMiddleware := handlers.CrossOriginProtectionMiddleware()
+	authRateLimitMiddleware := handlers.AuthRateLimitMiddleware()
 	sessionMiddleware := handlers.SessionMiddleware(sessions)
-	return crossOriginProtectionMiddleware(sessionMiddleware(appRouter))
+	return crossOriginProtectionMiddleware(authRateLimitMiddleware(sessionMiddleware(appRouter)))
 }
 
 func TestUserRouterRejectsUnsupportedMethods(t *testing.T) {
