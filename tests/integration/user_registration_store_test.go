@@ -23,6 +23,100 @@ import (
 
 var _ service.UserRegistrationStore = (*repository.UserRegistrationStore)(nil)
 
+func TestUserRegistrationStoreConcurrentUsername(t *testing.T) {
+	db := integrationDB(t)
+	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
+	defer cancel()
+	_, source, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("cannot resolve migration directory")
+	}
+	files := os.DirFS(filepath.Join(filepath.Dir(source), "..", "..", "migrations"))
+	if _, err := migrate.Up(ctx, db, files); err != nil {
+		t.Fatal(err)
+	}
+	repo := repository.NewUserRegistrationStore(db)
+	now := time.Date(2026, 11, 17, 12, 0, 0, 123456000, time.UTC)
+	users := [2]user.User{
+		{Username: "ivan", Name: "Первый", PasswordHash: "first-hash", CreatedAt: now, UpdatedAt: now},
+		{Username: "ivan", Name: "Второй", PasswordHash: "second-hash", CreatedAt: now, UpdatedAt: now},
+	}
+	sessions := [2]session.Session{
+		{TokenHash: bytes.Repeat([]byte{1}, 32), CreatedAt: now, ExpiresAt: now.Add(7 * 24 * time.Hour)},
+		{TokenHash: bytes.Repeat([]byte{2}, 32), CreatedAt: now, ExpiresAt: now.Add(7 * 24 * time.Hour)},
+	}
+	originalUsers := users
+	type registrationResult struct {
+		index int
+		err   error
+	}
+	start := make(chan struct{})
+	ready := make(chan struct{}, len(users))
+	results := make(chan registrationResult, len(users))
+	for i := range users {
+		go func() {
+			ready <- struct{}{}
+			<-start
+			results <- registrationResult{index: i, err: repo.Create(ctx, &users[i], &sessions[i])}
+		}()
+	}
+	for range users {
+		<-ready
+	}
+	close(start)
+
+	winner, loser := -1, -1
+	for range users {
+		result := <-results
+		switch {
+		case result.err == nil:
+			if winner != -1 {
+				t.Error("only one registration may succeed")
+			}
+			winner = result.index
+		case errors.Is(result.err, user.ErrUsernameTaken):
+			if loser != -1 {
+				t.Error("one registration must succeed rather than both being rejected")
+			}
+			loser = result.index
+		default:
+			t.Errorf("registration %d: unexpected error: %v", result.index, result.err)
+		}
+	}
+	if winner == -1 || loser == -1 {
+		t.Fatal("expected one successful registration and one ErrUsernameTaken")
+	}
+	if users[winner].ID <= 0 || sessions[winner].UserID != users[winner].ID {
+		t.Fatal("successful registration must assign the same user ID to both models")
+	}
+	if users[loser] != originalUsers[loser] || sessions[loser].UserID != 0 {
+		t.Fatal("rejected registration must not modify the user or assign a session user ID")
+	}
+	var userCount, sessionCount int
+	if err := db.QueryRowContext(ctx, "SELECT (SELECT count(*) FROM users), (SELECT count(*) FROM sessions)").Scan(&userCount, &sessionCount); err != nil {
+		t.Fatal(err)
+	}
+	if userCount != 1 || sessionCount != 1 {
+		t.Fatalf("users=%d, sessions=%d; want one user and one session", userCount, sessionCount)
+	}
+	storedUser, err := repository.NewUserRepository(db).GetByUsername(ctx, "ivan")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if storedUser.ID != users[winner].ID || storedUser.Username != users[winner].Username ||
+		storedUser.Name != users[winner].Name || storedUser.PasswordHash != users[winner].PasswordHash ||
+		!storedUser.CreatedAt.Equal(now) || !storedUser.UpdatedAt.Equal(now) {
+		t.Fatal("stored user must contain the winner's data without changes from the rejected registration")
+	}
+	storedSession, err := repository.NewSessionRepository(db).GetByTokenHash(ctx, sessions[winner].TokenHash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if storedSession.UserID != users[winner].ID || !storedSession.CreatedAt.Equal(now) || !storedSession.ExpiresAt.Equal(sessions[winner].ExpiresAt) {
+		t.Fatal("the only stored session must belong to the successful registration")
+	}
+}
+
 func TestUserRegistrationStore(t *testing.T) {
 	db := integrationDB(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
