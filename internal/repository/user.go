@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"time"
 
 	"chat/internal/model/user"
 )
@@ -109,4 +110,27 @@ func (repo *UserRepository) GetByID(ctx context.Context, id int64) (*user.User, 
 	}
 
 	return &u, nil
+}
+
+func (repo *UserRepository) UpdatePhoto(ctx context.Context, id int64, photo *string, updatedAt time.Time) (*string, error) {
+	var previous *string
+
+	err := repo.db.QueryRowContext(ctx, `
+		UPDATE users
+		SET photo = $2,
+			updated_at = CASE
+				WHEN photo IS DISTINCT FROM $2 THEN $3
+				ELSE updated_at
+			END
+		WHERE id = $1
+		RETURNING old.photo`, id, photo, updatedAt).Scan(&previous)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, user.ErrNotFound
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("update user photo: %w", err)
+	}
+
+	return previous, nil
 }
