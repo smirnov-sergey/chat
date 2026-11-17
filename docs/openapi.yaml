@@ -38,6 +38,10 @@ paths:
         При успехе автоматически выполняется вход: cookie chat_session
         действует 7 дней без продления по активности. Токен не возвращается в JSON.
 
+        Для одного IP допускается 5 запросов регистрации за 60 секунд с первого
+        запроса. Учитываются успешные и неуспешные попытки; счётчик входа отдельный.
+        При ограничении возвращается 429 с Retry-After в секундах.
+
         Запросы браузера с чужого сайта отклоняются. Для браузерного клиента
         UI и API должны иметь один origin; CORS сейчас не настроен.
         Запросы CLI без заголовков Origin и Sec-Fetch-Site допускаются.
@@ -113,6 +117,8 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
               example:
                 error: Content-Type must be application/json
+        '429':
+          $ref: '#/components/responses/AuthRateLimitExceeded'
         '500':
           description: Внутренняя ошибка. Технические подробности клиенту не возвращаются.
           content:
@@ -133,6 +139,10 @@ paths:
 
         Неверный username, неправильный пароль или отсутствие пароля у старого
         профиля дают один ответ 401: invalid username or password.
+
+        Для одного IP допускается 10 запросов входа за 60 секунд с первого
+        запроса. Учитываются успешные и неуспешные попытки; счётчик регистрации отдельный.
+        При ограничении возвращается 429 с Retry-After в секундах.
 
         Запросы браузера с чужого сайта отклоняются. Для браузерного клиента
         UI и API должны иметь один origin; CORS сейчас не настроен.
@@ -208,6 +218,8 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
               example:
                 error: Content-Type must be application/json
+        '429':
+          $ref: '#/components/responses/AuthRateLimitExceeded'
         '500':
           description: Внутренняя ошибка. Технические подробности клиенту не возвращаются.
           content:
@@ -351,6 +363,32 @@ paths:
                 error: internal server error
 
 components:
+  responses:
+    AuthRateLimitExceeded:
+      description: |
+        Достигнут лимит запросов для IP либо заполнена таблица отслеживаемых IP.
+        Запрос отклонён до проверки данных и создания пользователя или сессии;
+        Set-Cookie отсутствует. Retry-After задаёт время ожидания перед повтором.
+        Счётчики хранятся отдельно в каждом процессе и сбрасываются при перезапуске.
+        Запросы, отклонённые защитой от чужого origin, не расходуют лимит.
+        IP определяется по соединению; X-Forwarded-For и X-Real-IP не учитываются.
+      headers:
+        Retry-After:
+          description: Число секунд до повторной попытки, округлённое вверх.
+          schema:
+            type: string
+            pattern: '^[1-9][0-9]*$'
+          example: '60'
+        Cache-Control:
+          schema:
+            type: string
+            const: no-store
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: too many requests
   securitySchemes:
     sessionCookie:
       type: apiKey
