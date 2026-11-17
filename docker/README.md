@@ -10,6 +10,8 @@
 `POSTGRES_PORT` (например, `5432`).
 Для локального Go-запуска задайте `POSTGRES_HOST=127.0.0.1` и
 `POSTGRES_SSLMODE=disable` (соединение без TLS в development).
+Для локального HTTP задайте `SESSION_COOKIE_SECURE=false`;
+иначе сессионная cookie предназначена для HTTPS.
 
 Запуск приложения и PostgreSQL с обновлением Go-кода:
 
@@ -26,8 +28,18 @@ docker compose --env-file .env -f docker/docker-compose.dev.yml ps
 ```
 
 Ожидаются лог `PostgreSQL connected`, `200 OK` и PostgreSQL со статусом `healthy`.
+Проверка `/health` не подтверждает наличие прикладных таблиц.
+Перед запросами регистрации и входа отдельно примените миграции:
+
+```powershell
+docker compose --env-file .env -f docker/docker-compose.dev.yml exec app go run ./cmd/migrate up
+```
+
+Миграции не выполняются автоматически при запуске приложения.
 Сохраните изменение в Go-файле: приложение должно пересобраться и перезапуститься.
 Изменения `.env` применяются повторным `up --build --watch` после остановки.
+При пересоздании приложения счётчики ограничителя запросов обнуляются;
+сессии сохраняются в PostgreSQL.
 
 ## Что настроено
 
