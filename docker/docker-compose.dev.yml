@@ -13,6 +13,9 @@ services:
       HTTP_ADDR: ":8080"
       POSTGRES_HOST: postgres
       POSTGRES_PORT: "5432"
+      STORAGE_DIR: /app/storage/files
+    volumes:
+      - storage:/app/storage/files
     depends_on:
       postgres:
         condition: service_healthy
@@ -30,6 +33,7 @@ services:
             - "*.exe"
             - docs/
             - README.md
+            - storage/
 
   postgres:
     image: postgres:18.6-bookworm
@@ -48,3 +52,4 @@ services:
 
 volumes:
   postgres_data:
+  storage:

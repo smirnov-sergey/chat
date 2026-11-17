@@ -30,6 +30,8 @@ func TestRunRejectsMalformedDotEnv(t *testing.T) {
 
 func TestRunRejectsMissingPostgresConfiguration(t *testing.T) {
 	t.Chdir(t.TempDir())
+	t.Setenv("STORAGE_DIR", "storage/files")
+	t.Setenv("MAX_PHOTO_SIZE", "5242880")
 	t.Setenv("POSTGRES_HOST", "")
 	err := run([]string{"up"})
 	if err == nil || !strings.Contains(err.Error(), "POSTGRES_HOST") {

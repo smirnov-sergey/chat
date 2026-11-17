@@ -3,6 +3,8 @@
 
 .env
 
+/storage/
+
 # Local binaries
 *.exe
 /chat

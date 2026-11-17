@@ -33,6 +33,7 @@ func TestLoadConfig(t *testing.T) {
 				"POSTGRES_HOST": "127.0.0.1", "POSTGRES_PORT": "5432",
 				"POSTGRES_DB": "chat", "POSTGRES_USER": "chat",
 				"POSTGRES_PASSWORD": "test_password", "POSTGRES_SSLMODE": "disable",
+				"STORAGE_DIR": "storage/files", "MAX_PHOTO_SIZE": "5242880",
 			} {
 				t.Setenv(key, value)
 			}

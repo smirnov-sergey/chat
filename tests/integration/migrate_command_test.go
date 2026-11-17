@@ -53,6 +53,8 @@ func TestMigrateCommandApplyAndRepeat(t *testing.T) {
 			"POSTGRES_PASSWORD="+settings.Password,
 			"POSTGRES_SSLMODE="+settings.SSLMode,
 			"SESSION_COOKIE_SECURE=false",
+			"STORAGE_DIR=storage/files",
+			"MAX_PHOTO_SIZE=5242880",
 			"PGOPTIONS=-c search_path="+schema,
 		)
 		output, err := command.CombinedOutput()

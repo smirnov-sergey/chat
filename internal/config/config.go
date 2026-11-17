@@ -12,6 +12,8 @@ import (
 type Config struct {
 	HTTPAddr            string
 	SessionCookieSecure bool
+	StorageDir          string
+	MaxPhotoSize        int64
 	Postgres            PostgresConfig
 }
 
@@ -55,6 +57,16 @@ func Load() (Config, error) {
 		}
 		cfg.SessionCookieSecure = secure
 	}
+	cfg.StorageDir = os.Getenv("STORAGE_DIR")
+	if strings.TrimSpace(cfg.StorageDir) == "" {
+		return Config{}, fmt.Errorf("STORAGE_DIR is required")
+	}
+	maxPhotoSizeValue := os.Getenv("MAX_PHOTO_SIZE")
+	maxPhotoSize, err := strconv.ParseInt(maxPhotoSizeValue, 10, 64)
+	if err != nil || maxPhotoSize <= 0 {
+		return Config{}, fmt.Errorf("MAX_PHOTO_SIZE must be a positive integer number of bytes")
+	}
+	cfg.MaxPhotoSize = maxPhotoSize
 
 	cfg.Postgres = PostgresConfig{
 		Host:     os.Getenv("POSTGRES_HOST"),

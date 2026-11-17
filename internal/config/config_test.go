@@ -3,6 +3,7 @@ package config_test
 import (
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -10,6 +11,7 @@ import (
 )
 
 func TestLoadPostgres(t *testing.T) {
+	setRequiredEnvironment(t)
 	t.Setenv("POSTGRES_HOST", "127.0.0.1")
 	t.Setenv("POSTGRES_PORT", "5433")
 	t.Setenv("POSTGRES_DB", "chat")
@@ -49,11 +51,98 @@ func TestPostgresConnectionString(t *testing.T) {
 func TestDefaultIgnoresEnvironment(t *testing.T) {
 	t.Setenv("HTTP_ADDR", "127.0.0.1:9090")
 	t.Setenv("SESSION_COOKIE_SECURE", "false")
+	t.Setenv("STORAGE_DIR", "custom/photos")
+	t.Setenv("MAX_PHOTO_SIZE", "1")
 	if got := config.Default().HTTPAddr; got != "127.0.0.1:8080" {
 		t.Errorf("HTTPAddr = %q, want 127.0.0.1:8080", got)
 	}
 	if !config.Default().SessionCookieSecure {
 		t.Error("default session cookie must be Secure regardless of environment")
+	}
+	if got := config.Default().StorageDir; got != "" {
+		t.Errorf("StorageDir = %q, want no default for a required setting", got)
+	}
+	if got := config.Default().MaxPhotoSize; got != 0 {
+		t.Errorf("MaxPhotoSize = %d, want no default for a required setting", got)
+	}
+}
+
+func TestLoadRequiresPhotoSettings(t *testing.T) {
+	for _, key := range []string{"STORAGE_DIR", "MAX_PHOTO_SIZE"} {
+		for _, state := range []string{"empty", "missing"} {
+			t.Run(key+"/"+state, func(t *testing.T) {
+				setRequiredEnvironment(t)
+				t.Setenv(key, "")
+				if state == "missing" {
+					if err := os.Unsetenv(key); err != nil {
+						t.Fatal(err)
+					}
+				}
+				cfg, err := config.Load()
+				if err == nil || !strings.Contains(err.Error(), key) {
+					t.Fatalf("Load error = %v, want an error naming %s", err, key)
+				}
+				if cfg != (config.Config{}) {
+					t.Fatal("missing settings must not return a partial configuration")
+				}
+			})
+		}
+	}
+}
+
+func TestLoadPhotoSettings(t *testing.T) {
+	setRequiredEnvironment(t)
+	t.Setenv("STORAGE_DIR", "custom/photo files")
+	t.Setenv("MAX_PHOTO_SIZE", "1048576")
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.StorageDir != "custom/photo files" || cfg.MaxPhotoSize != 1048576 {
+		t.Fatalf("photo settings: directory=%q, size=%d; want custom/photo files, 1048576", cfg.StorageDir, cfg.MaxPhotoSize)
+	}
+}
+
+func TestLoadRejectsInvalidPhotoSettings(t *testing.T) {
+	for _, tt := range []struct{ key, value string }{
+		{"STORAGE_DIR", " \t "},
+		{"MAX_PHOTO_SIZE", "0"},
+		{"MAX_PHOTO_SIZE", "-1"},
+		{"MAX_PHOTO_SIZE", "abc"},
+		{"MAX_PHOTO_SIZE", "1.5"},
+		{"MAX_PHOTO_SIZE", " "},
+		{"MAX_PHOTO_SIZE", "9223372036854775808"},
+	} {
+		t.Run(tt.key+"/"+tt.value, func(t *testing.T) {
+			setRequiredEnvironment(t)
+			t.Setenv("STORAGE_DIR", "storage/files")
+			t.Setenv("MAX_PHOTO_SIZE", "5242880")
+			t.Setenv(tt.key, tt.value)
+			cfg, err := config.Load()
+			if err == nil || !strings.Contains(err.Error(), tt.key) {
+				t.Fatalf("Load error = %v, want an error naming %s", err, tt.key)
+			}
+			if cfg != (config.Config{}) {
+				t.Fatal("invalid settings must not return a partial configuration")
+			}
+		})
+	}
+}
+
+func TestLoadAcceptsPositivePhotoSizeBoundaries(t *testing.T) {
+	for _, value := range []string{"1", "9223372036854775807"} {
+		t.Run(value, func(t *testing.T) {
+			setRequiredEnvironment(t)
+			t.Setenv("STORAGE_DIR", "storage/files")
+			t.Setenv("MAX_PHOTO_SIZE", value)
+			cfg, err := config.Load()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if strconv.FormatInt(cfg.MaxPhotoSize, 10) != value {
+				t.Fatal("photo size must preserve the configured positive int64 value")
+			}
+		})
 	}
 }
 
@@ -69,7 +158,7 @@ func TestLoadSessionCookieSecure(t *testing.T) {
 		{"invalid", false, false},
 	} {
 		t.Run(tt.value, func(t *testing.T) {
-			setPostgresEnvironment(t)
+			setRequiredEnvironment(t)
 			t.Setenv("SESSION_COOKIE_SECURE", tt.value)
 			cfg, err := config.Load()
 			if !tt.valid {
@@ -86,7 +175,7 @@ func TestLoadSessionCookieSecure(t *testing.T) {
 }
 
 func TestLoadWithoutHTTPAddr(t *testing.T) {
-	setPostgresEnvironment(t)
+	setRequiredEnvironment(t)
 	t.Setenv("HTTP_ADDR", "")
 	if err := os.Unsetenv("HTTP_ADDR"); err != nil {
 		t.Fatal(err)
@@ -101,7 +190,7 @@ func TestLoadWithoutHTTPAddr(t *testing.T) {
 }
 
 func TestLoadHTTPAddr(t *testing.T) {
-	setPostgresEnvironment(t)
+	setRequiredEnvironment(t)
 	tests := []struct {
 		name string
 		env  string
@@ -142,7 +231,7 @@ func TestLoadRejectsInvalidPostgres(t *testing.T) {
 		{"POSTGRES_SSLMODE", "invalid"},
 	} {
 		t.Run(tt.name+"/"+tt.value, func(t *testing.T) {
-			setPostgresEnvironment(t)
+			setRequiredEnvironment(t)
 			t.Setenv(tt.name, tt.value)
 			_, err := config.Load()
 			if err == nil || !strings.Contains(err.Error(), tt.name) {
@@ -155,7 +244,7 @@ func TestLoadRejectsInvalidPostgres(t *testing.T) {
 func TestLoadAcceptsPortBoundaries(t *testing.T) {
 	for _, port := range []string{"1", "65535"} {
 		t.Run(port, func(t *testing.T) {
-			setPostgresEnvironment(t)
+			setRequiredEnvironment(t)
 			t.Setenv("POSTGRES_PORT", port)
 			if _, err := config.Load(); err != nil {
 				t.Fatal(err)
@@ -164,12 +253,13 @@ func TestLoadAcceptsPortBoundaries(t *testing.T) {
 	}
 }
 
-func setPostgresEnvironment(t *testing.T) {
+func setRequiredEnvironment(t *testing.T) {
 	t.Helper()
 	for key, value := range map[string]string{
 		"POSTGRES_HOST": "127.0.0.1", "POSTGRES_PORT": "5432",
 		"POSTGRES_DB": "chat", "POSTGRES_USER": "chat",
 		"POSTGRES_PASSWORD": "test_password", "POSTGRES_SSLMODE": "disable",
+		"STORAGE_DIR": "storage/files", "MAX_PHOTO_SIZE": "5242880",
 	} {
 		t.Setenv(key, value)
 	}

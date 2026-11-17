@@ -41,6 +41,8 @@ jobs:
       POSTGRES_PASSWORD: chat_ci_password
       POSTGRES_SSLMODE: disable
       POSTGRES_TEST_DB: chat_test
+      STORAGE_DIR: storage/files
+      MAX_PHOTO_SIZE: "5242880"
       GOTOOLCHAIN: local
 
     steps:
