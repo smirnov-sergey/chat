@@ -30,9 +30,10 @@ func (repo *UserRepository) Create(ctx context.Context, u *user.User) error {
 			name,
 			created_at,
 			updated_at,
-			password_hash
+			password_hash,
+			photo
 		)
-		VALUES ($1, $2, $3, $4, $5)
+		VALUES ($1, $2, $3, $4, $5, $6)
 		ON CONFLICT (username) DO NOTHING
 		RETURNING id`,
 		u.Username,
@@ -40,6 +41,7 @@ func (repo *UserRepository) Create(ctx context.Context, u *user.User) error {
 		u.CreatedAt,
 		u.UpdatedAt,
 		u.PasswordHash,
+		u.Photo,
 	).Scan(&id)
 
 	if errors.Is(err, sql.ErrNoRows) {
@@ -57,7 +59,7 @@ func (repo *UserRepository) Create(ctx context.Context, u *user.User) error {
 func (repo *UserRepository) GetByUsername(ctx context.Context, username string) (*user.User, error) {
 	var u user.User
 	err := repo.db.QueryRowContext(ctx, `
-		SELECT id, username, name, created_at, updated_at, COALESCE(password_hash, '')
+		SELECT id, username, name, created_at, updated_at, COALESCE(password_hash, ''), photo
 		FROM users
 		WHERE username = $1`, username,
 	).Scan(
@@ -67,6 +69,7 @@ func (repo *UserRepository) GetByUsername(ctx context.Context, username string) 
 		&u.CreatedAt,
 		&u.UpdatedAt,
 		&u.PasswordHash,
+		&u.Photo,
 	)
 
 	if errors.Is(err, sql.ErrNoRows) {
@@ -84,7 +87,7 @@ func (repo *UserRepository) GetByID(ctx context.Context, id int64) (*user.User, 
 	var u user.User
 
 	err := repo.db.QueryRowContext(ctx, `
-		SELECT id, username, name, created_at, updated_at, COALESCE(password_hash, '')
+		SELECT id, username, name, created_at, updated_at, COALESCE(password_hash, ''), photo
 		FROM users
 		WHERE id = $1`, id,
 	).Scan(
@@ -94,6 +97,7 @@ func (repo *UserRepository) GetByID(ctx context.Context, id int64) (*user.User, 
 		&u.CreatedAt,
 		&u.UpdatedAt,
 		&u.PasswordHash,
+		&u.Photo,
 	)
 
 	if errors.Is(err, sql.ErrNoRows) {

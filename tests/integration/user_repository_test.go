@@ -4,6 +4,7 @@ package integration_test
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"os"
 	"path/filepath"
@@ -46,12 +47,78 @@ func TestUserRepository(t *testing.T) {
 		if got == nil {
 			t.Fatal("expected a user, got nil")
 		}
-		if got.ID != stored.ID || got.Username != input.Username || got.Name != input.Name || got.PasswordHash != input.PasswordHash ||
+		if got.ID != stored.ID || got.Username != input.Username || got.Name != input.Name || got.PasswordHash != input.PasswordHash || got.Photo != nil ||
 			!got.CreatedAt.Equal(now) || !got.UpdatedAt.Equal(now) {
 			t.Fatalf("stored user = %+v, want ID %d and data %+v", got, stored.ID, input)
 		}
 	}
 	assertStoredUser(t, &stored)
+
+	t.Run("missing photo is stored as NULL", func(t *testing.T) {
+		var photo sql.NullString
+		if err := db.QueryRowContext(ctx, "SELECT photo FROM users WHERE id = $1", stored.ID).Scan(&photo); err != nil {
+			t.Fatal(err)
+		}
+		if photo.Valid {
+			t.Fatal("creation without a photo must store NULL")
+		}
+	})
+
+	t.Run("create and read photo", func(t *testing.T) {
+		filename := "profile-photo.png"
+		value := input
+		value.Username = "photo_user"
+		value.Photo = &filename
+		if err := repo.Create(ctx, &value); err != nil {
+			t.Fatal(err)
+		}
+		if value.ID <= 0 || value.Photo == nil || *value.Photo != filename {
+			t.Fatal("creation must assign an ID and preserve the photo filename")
+		}
+		var storedPhoto string
+		if err := db.QueryRowContext(ctx, "SELECT photo FROM users WHERE id = $1", value.ID).Scan(&storedPhoto); err != nil {
+			t.Fatal(err)
+		}
+		if storedPhoto != filename {
+			t.Fatalf("stored photo = %q, want %q", storedPhoto, filename)
+		}
+		byUsername, err := repo.GetByUsername(ctx, value.Username)
+		if err != nil {
+			t.Fatal(err)
+		}
+		byID, err := repo.GetByID(ctx, value.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, got := range []*user.User{byUsername, byID} {
+			if got == nil || got.Photo == nil || *got.Photo != filename {
+				t.Fatal("both lookup methods must return the stored photo filename")
+			}
+			if got.ID != value.ID || got.Username != value.Username || got.Name != value.Name || got.PasswordHash != value.PasswordHash ||
+				!got.CreatedAt.Equal(now) || !got.UpdatedAt.Equal(now) {
+				t.Fatalf("unexpected stored user: %+v", got)
+			}
+		}
+	})
+
+	t.Run("empty photo creates no user", func(t *testing.T) {
+		empty := ""
+		value := input
+		value.Username = "empty_photo"
+		value.Photo = &empty
+		before := value
+		err := repo.Create(ctx, &value)
+		var pgErr *pgconn.PgError
+		if !errors.As(err, &pgErr) || pgErr.Code != "23514" || pgErr.ConstraintName != "users_photo_not_empty" {
+			t.Fatalf("Create error = %v, want users_photo_not_empty violation", err)
+		}
+		if value != before {
+			t.Fatal("failed creation must not modify the supplied user")
+		}
+		if got, err := repo.GetByUsername(ctx, value.Username); got != nil || !errors.Is(err, user.ErrNotFound) {
+			t.Fatalf("lookup = (%+v, %v), want no user and ErrNotFound", got, err)
+		}
+	})
 
 	t.Run("password hash is stored", func(t *testing.T) {
 		var hash string
