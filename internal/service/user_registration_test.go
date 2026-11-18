@@ -29,7 +29,7 @@ var _ service.UserRegistrationStore = fakeUserRegistrationStore{}
 
 func newRegistrationUserService(t *testing.T, store fakeUserRegistrationStore, hasher fakePasswordHasher) *service.UserService {
 	t.Helper()
-	s, err := service.NewUserService(nil, store, fakePasswordService{hash: hasher}, nil, 7*24*time.Hour)
+	s, err := service.NewUserService(nil, store, fakePasswordService{hash: hasher}, nil, nil, nil, 7*24*time.Hour)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -38,7 +38,7 @@ func newRegistrationUserService(t *testing.T, store fakeUserRegistrationStore, h
 
 func TestNewUserServiceRejectsInvalidLifetime(t *testing.T) {
 	for _, lifetime := range []time.Duration{0, -time.Second} {
-		s, err := service.NewUserService(nil, fakeUserRegistrationStore{}, fakePasswordService{hash: fixedPasswordHash}, nil, lifetime)
+		s, err := service.NewUserService(nil, fakeUserRegistrationStore{}, fakePasswordService{hash: fixedPasswordHash}, nil, nil, nil, lifetime)
 		if s != nil || err == nil {
 			t.Fatalf("NewUserService(%v) = (%v, %v), want (nil, error)", lifetime, s, err)
 		}

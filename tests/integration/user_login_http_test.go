@@ -40,7 +40,7 @@ func TestUserLoginHTTP(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	users, err := service.NewUserService(repository.NewUserRepository(db), repository.NewUserRegistrationStore(db), password.Argon2id{}, sessions, sessionLifetime)
+	users, err := service.NewUserService(repository.NewUserRepository(db), repository.NewUserRegistrationStore(db), password.Argon2id{}, sessions, nil, nil, sessionLifetime)
 	if err != nil {
 		t.Fatal(err)
 	}

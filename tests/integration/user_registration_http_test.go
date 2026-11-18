@@ -43,7 +43,7 @@ func TestUserRegistrationHTTP(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	users, err := service.NewUserService(repository.NewUserRepository(db), repository.NewUserRegistrationStore(db), hasher, sessions, sessionLifetime)
+	users, err := service.NewUserService(repository.NewUserRepository(db), repository.NewUserRegistrationStore(db), hasher, sessions, nil, nil, sessionLifetime)
 	if err != nil {
 		t.Fatal(err)
 	}

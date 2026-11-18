@@ -49,11 +49,13 @@ func TestAppRunAuthentication(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	storageDirectory := t.TempDir()
 	appCtx, stop := context.WithCancel(ctx)
 	result := make(chan error, 1)
 	go func() {
 		result <- app.Run(appCtx, config.Config{
 			HTTPAddr: address, Postgres: settings, SessionCookieSecure: false,
+			StorageDir: storageDirectory, MaxPhotoSize: 5 * 1024 * 1024,
 		})
 	}()
 	t.Cleanup(func() {

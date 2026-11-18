@@ -22,7 +22,7 @@ func TestUserServiceGetByID(t *testing.T) {
 		}
 		return want, nil
 	}}
-	s, err := service.NewUserService(repo, nil, nil, nil, 7*24*time.Hour)
+	s, err := service.NewUserService(repo, nil, nil, nil, nil, nil, 7*24*time.Hour)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -38,7 +38,7 @@ func TestUserServiceGetByIDErrors(t *testing.T) {
 			repo := fakeUserRepository{getByID: func(context.Context, int64) (*user.User, error) {
 				return nil, fmt.Errorf("lookup: %w", want)
 			}}
-			s, err := service.NewUserService(repo, nil, nil, nil, 7*24*time.Hour)
+			s, err := service.NewUserService(repo, nil, nil, nil, nil, nil, 7*24*time.Hour)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -57,7 +57,7 @@ func TestUserServiceGetByIDCanceledContext(t *testing.T) {
 		t.Fatal("canceled lookup must not call the repository")
 		return nil, nil
 	}}
-	s, err := service.NewUserService(repo, nil, nil, nil, 7*24*time.Hour)
+	s, err := service.NewUserService(repo, nil, nil, nil, nil, nil, 7*24*time.Hour)
 	if err != nil {
 		t.Fatal(err)
 	}

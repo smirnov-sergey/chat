@@ -20,7 +20,7 @@ func TestUserServiceLogout(t *testing.T) {
 			}
 			return want
 		}}
-		s, err := service.NewUserService(nil, nil, nil, sessions, 7*24*time.Hour)
+		s, err := service.NewUserService(nil, nil, nil, sessions, nil, nil, 7*24*time.Hour)
 		if err != nil {
 			t.Fatal(err)
 		}

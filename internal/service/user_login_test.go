@@ -17,6 +17,7 @@ import (
 type fakeUserRepository struct {
 	getByUsername func(context.Context, string) (*user.User, error)
 	getByID       func(context.Context, int64) (*user.User, error)
+	updatePhoto   func(context.Context, int64, *string, time.Time) (*string, error)
 }
 
 func (fake fakeUserRepository) GetByUsername(ctx context.Context, username string) (*user.User, error) {
@@ -25,6 +26,10 @@ func (fake fakeUserRepository) GetByUsername(ctx context.Context, username strin
 
 func (fake fakeUserRepository) GetByID(ctx context.Context, id int64) (*user.User, error) {
 	return fake.getByID(ctx, id)
+}
+
+func (fake fakeUserRepository) UpdatePhoto(ctx context.Context, id int64, value *string, updatedAt time.Time) (*string, error) {
+	return fake.updatePhoto(ctx, id, value, updatedAt)
 }
 
 type fakePasswordVerifier func(string, string) (bool, error)
@@ -206,7 +211,7 @@ func TestUserServiceLoginCancellation(t *testing.T) {
 
 func newLoginUserService(t *testing.T, repo fakeUserRepository, passwords fakePasswordService, sessions fakeUserSessions) *service.UserService {
 	t.Helper()
-	s, err := service.NewUserService(repo, nil, passwords, sessions, 7*24*time.Hour)
+	s, err := service.NewUserService(repo, nil, passwords, sessions, nil, nil, 7*24*time.Hour)
 	if err != nil {
 		t.Fatal(err)
 	}

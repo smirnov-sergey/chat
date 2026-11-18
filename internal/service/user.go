@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -16,6 +17,7 @@ import (
 type UserRepository interface {
 	GetByUsername(ctx context.Context, username string) (*user.User, error)
 	GetByID(ctx context.Context, id int64) (*user.User, error)
+	UpdatePhoto(ctx context.Context, id int64, photo *string, updatedAt time.Time) (*string, error)
 }
 
 type UserRegistrationStore interface {
@@ -32,6 +34,15 @@ type UserSessions interface {
 	Logout(ctx context.Context, token string) error
 }
 
+type PhotoProcessor interface {
+	Process(ctx context.Context, data []byte) ([]byte, error)
+}
+
+type PhotoStorage interface {
+	Save(data []byte) (string, error)
+	Delete(filename string) error
+}
+
 type UserSession struct {
 	User  *user.User
 	Token *session.Token
@@ -42,6 +53,8 @@ type UserService struct {
 	registrationStore UserRegistrationStore
 	passwords         PasswordService
 	sessions          UserSessions
+	photoProcessor    PhotoProcessor
+	photoStorage      PhotoStorage
 	sessionLifetime   time.Duration
 }
 
@@ -50,6 +63,8 @@ func NewUserService(
 	registrationStore UserRegistrationStore,
 	passwords PasswordService,
 	sessions UserSessions,
+	photoProcessor PhotoProcessor,
+	photoStorage PhotoStorage,
 	sessionLifetime time.Duration,
 ) (*UserService, error) {
 	if sessionLifetime <= 0 {
@@ -61,6 +76,8 @@ func NewUserService(
 		registrationStore: registrationStore,
 		passwords:         passwords,
 		sessions:          sessions,
+		photoProcessor:    photoProcessor,
+		photoStorage:      photoStorage,
 		sessionLifetime:   sessionLifetime,
 	}, nil
 }
@@ -175,4 +192,57 @@ func (s *UserService) GetByID(ctx context.Context, id int64) (*user.User, error)
 
 func (s *UserService) Logout(ctx context.Context, token string) error {
 	return s.sessions.Logout(ctx, token)
+}
+
+func (s *UserService) UploadPhoto(ctx context.Context, userID int64, data []byte) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
+	if _, err := s.repository.GetByID(ctx, userID); err != nil {
+		return fmt.Errorf("find user for photo upload: %w", err)
+	}
+
+	processed, err := s.photoProcessor.Process(ctx, data)
+	if err != nil {
+		return fmt.Errorf("process user photo: %w", err)
+	}
+
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
+	filename, err := s.photoStorage.Save(processed)
+	if err != nil {
+		return fmt.Errorf("save user photo: %w", err)
+	}
+
+	if err := ctx.Err(); err != nil {
+		s.deletePhotoFile(filename)
+		return err
+	}
+
+	previous, err := s.repository.UpdatePhoto(ctx, userID, &filename, time.Now().UTC())
+	if err != nil {
+		if errors.Is(err, user.ErrNotFound) {
+			s.deletePhotoFile(filename)
+		} else {
+			// A connection failure can leave the update outcome uncertain.
+			// Removing the new file could break an already committed reference.
+			log.Printf("user photo update failed; retained file %q: %v", filename, err)
+		}
+		return fmt.Errorf("update user photo: %w", err)
+	}
+
+	if previous != nil && *previous != filename {
+		s.deletePhotoFile(*previous)
+	}
+
+	return nil
+}
+
+func (s *UserService) deletePhotoFile(filename string) {
+	if err := s.photoStorage.Delete(filename); err != nil {
+		log.Printf("delete unused user photo %q: %v", filename, err)
+	}
 }

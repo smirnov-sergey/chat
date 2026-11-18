@@ -11,10 +11,12 @@ import (
 	"chat/internal/config"
 	"chat/internal/handlers"
 	"chat/internal/password"
+	"chat/internal/photo"
 	"chat/internal/postgres"
 	"chat/internal/repository"
 	"chat/internal/router"
 	"chat/internal/service"
+	"chat/internal/storage"
 )
 
 const sessionLifetime = 7 * 24 * time.Hour
@@ -49,7 +51,18 @@ func Run(ctx context.Context, cfg config.Config) error {
 		return fmt.Errorf("create session service: %w", err)
 	}
 
-	userService, err := service.NewUserService(userRepository, userRegistrationStore, password.Argon2id{}, sessionService, sessionLifetime)
+	photoStorage, err := storage.NewPhotoStorage(cfg.StorageDir)
+	if err != nil {
+		return fmt.Errorf("create photo storage: %w", err)
+	}
+	defer photoStorage.Close()
+
+	photoProcessor, err := photo.NewProcessor(cfg.MaxPhotoSize)
+	if err != nil {
+		return fmt.Errorf("create photo processor: %w", err)
+	}
+
+	userService, err := service.NewUserService(userRepository, userRegistrationStore, password.Argon2id{}, sessionService, photoProcessor, photoStorage, sessionLifetime)
 	if err != nil {
 		return fmt.Errorf("create user service: %w", err)
 	}

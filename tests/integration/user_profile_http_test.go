@@ -42,7 +42,7 @@ func TestUserProfileHTTP(t *testing.T) {
 		t.Fatal(err)
 	}
 	repo := repository.NewUserRepository(db)
-	users, err := service.NewUserService(repo, repository.NewUserRegistrationStore(db), password.Argon2id{}, sessions, lifetime)
+	users, err := service.NewUserService(repo, repository.NewUserRegistrationStore(db), password.Argon2id{}, sessions, nil, nil, lifetime)
 	if err != nil {
 		t.Fatal(err)
 	}

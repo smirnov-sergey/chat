@@ -41,7 +41,7 @@ func TestUserLogoutHTTP(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	users, err := service.NewUserService(repository.NewUserRepository(db), repository.NewUserRegistrationStore(db), password.Argon2id{}, sessions, lifetime)
+	users, err := service.NewUserService(repository.NewUserRepository(db), repository.NewUserRegistrationStore(db), password.Argon2id{}, sessions, nil, nil, lifetime)
 	if err != nil {
 		t.Fatal(err)
 	}
