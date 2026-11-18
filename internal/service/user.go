@@ -241,6 +241,23 @@ func (s *UserService) UploadPhoto(ctx context.Context, userID int64, data []byte
 	return nil
 }
 
+func (s *UserService) DeletePhoto(ctx context.Context, userID int64) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
+	previous, err := s.repository.UpdatePhoto(ctx, userID, nil, time.Now().UTC())
+	if err != nil {
+		return fmt.Errorf("clear user photo: %w", err)
+	}
+
+	if previous != nil {
+		s.deletePhotoFile(*previous)
+	}
+
+	return nil
+}
+
 func (s *UserService) deletePhotoFile(filename string) {
 	if err := s.photoStorage.Delete(filename); err != nil {
 		log.Printf("delete unused user photo %q: %v", filename, err)

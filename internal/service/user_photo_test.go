@@ -260,3 +260,80 @@ func TestUserServiceUploadPhotoCancellation(t *testing.T) {
 		})
 	}
 }
+
+func TestUserServiceDeletePhoto(t *testing.T) {
+	filename := "previous-photo"
+	for _, tt := range []struct {
+		name              string
+		previous          *string
+		deleteError       error
+		cancelAfterUpdate bool
+	}{
+		{"existing photo", &filename, nil, false},
+		{"no photo", nil, nil, false},
+		{"file cleanup failure does not undo deletion", &filename, errors.New("disk unavailable"), false},
+		{"cancellation after update does not prevent cleanup", &filename, nil, true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			before := time.Now().UTC()
+			var calls []string
+			repo := fakeUserRepository{updatePhoto: func(gotCtx context.Context, id int64, value *string, updatedAt time.Time) (*string, error) {
+				calls = append(calls, "update")
+				if gotCtx != ctx || id != 42 || value != nil {
+					t.Fatal("deletion must update the supplied user with NULL using the caller's context")
+				}
+				if updatedAt.Location() != time.UTC || updatedAt.Before(before) || updatedAt.After(time.Now().UTC()) {
+					t.Fatal("modification time must be the current time in UTC")
+				}
+				if tt.cancelAfterUpdate {
+					cancel()
+				}
+				return tt.previous, nil
+			}}
+			files := fakePhotoStorage{delete: func(got string) error {
+				calls = append(calls, "delete")
+				if got != filename {
+					t.Fatalf("deleted filename = %q, want %q", got, filename)
+				}
+				return tt.deleteError
+			}}
+			s := newPhotoUserService(t, repo, fakePhotoProcessor{}, files)
+			if err := s.DeletePhoto(ctx, 42); err != nil {
+				t.Fatalf("committed deletion must be successful: %v", err)
+			}
+			want := []string{"update"}
+			if tt.previous != nil {
+				want = append(want, "delete")
+			}
+			if !slices.Equal(calls, want) {
+				t.Fatalf("calls = %v, want %v", calls, want)
+			}
+		})
+	}
+}
+
+func TestUserServiceDeletePhotoRepositoryErrors(t *testing.T) {
+	for _, want := range []error{user.ErrNotFound, errors.New("database unavailable"), context.Canceled} {
+		t.Run(want.Error(), func(t *testing.T) {
+			filename := "previous-photo"
+			repo := fakeUserRepository{updatePhoto: func(context.Context, int64, *string, time.Time) (*string, error) {
+				return &filename, fmt.Errorf("update: %w", want)
+			}}
+			s := newPhotoUserService(t, repo, fakePhotoProcessor{}, fakePhotoStorage{})
+			if err := s.DeletePhoto(t.Context(), 42); !errors.Is(err, want) {
+				t.Fatalf("DeletePhoto error = %v, want %v", err, want)
+			}
+		})
+	}
+}
+
+func TestUserServiceDeletePhotoCanceledContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	s := newPhotoUserService(t, fakeUserRepository{}, fakePhotoProcessor{}, fakePhotoStorage{})
+	if err := s.DeletePhoto(ctx, 42); !errors.Is(err, context.Canceled) {
+		t.Fatalf("DeletePhoto error = %v, want context.Canceled without calling dependencies", err)
+	}
+}
