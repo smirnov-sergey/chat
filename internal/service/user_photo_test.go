@@ -25,11 +25,13 @@ func (fake fakePhotoProcessor) Process(ctx context.Context, data []byte) ([]byte
 
 type fakePhotoStorage struct {
 	save   func([]byte) (string, error)
+	read   func(string) ([]byte, error)
 	delete func(string) error
 }
 
-func (fake fakePhotoStorage) Save(data []byte) (string, error) { return fake.save(data) }
-func (fake fakePhotoStorage) Delete(filename string) error     { return fake.delete(filename) }
+func (fake fakePhotoStorage) Save(data []byte) (string, error)     { return fake.save(data) }
+func (fake fakePhotoStorage) Read(filename string) ([]byte, error) { return fake.read(filename) }
+func (fake fakePhotoStorage) Delete(filename string) error         { return fake.delete(filename) }
 
 var (
 	_ service.PhotoProcessor = fakePhotoProcessor{}

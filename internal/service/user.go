@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log"
 	"strings"
 	"time"
@@ -40,6 +41,7 @@ type PhotoProcessor interface {
 
 type PhotoStorage interface {
 	Save(data []byte) (string, error)
+	Read(filename string) ([]byte, error)
 	Delete(filename string) error
 }
 
@@ -256,6 +258,40 @@ func (s *UserService) DeletePhoto(ctx context.Context, userID int64) error {
 	}
 
 	return nil
+}
+
+func (s *UserService) GetPhoto(ctx context.Context, userID int64) ([]byte, error) {
+	for range 2 {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+
+		u, err := s.repository.GetByID(ctx, userID)
+		if err != nil {
+			return nil, fmt.Errorf("find user for photo read: %w", err)
+		}
+
+		if u.Photo == nil {
+			return nil, user.ErrPhotoNotFound
+		}
+
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+
+		data, err := s.photoStorage.Read(*u.Photo)
+		if errors.Is(err, fs.ErrNotExist) {
+			continue
+		}
+
+		if err != nil {
+			return nil, fmt.Errorf("read user photo: %w", err)
+		}
+
+		return data, nil
+	}
+
+	return nil, user.ErrPhotoNotFound
 }
 
 func (s *UserService) deletePhotoFile(filename string) {
