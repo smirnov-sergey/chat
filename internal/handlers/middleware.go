@@ -20,8 +20,6 @@ type SessionAuthenticator interface {
 	Authenticate(ctx context.Context, token string) (*session.Session, error)
 }
 
-type userIDContextKey struct{}
-
 func CrossOriginProtectionMiddleware() func(http.Handler) http.Handler {
 	protection := http.NewCrossOriginProtection()
 	protection.SetDenyHandler(http.HandlerFunc(crossOriginDenied))
@@ -98,9 +96,4 @@ func SessionMiddleware(sessionAuthenticator SessionAuthenticator) func(http.Hand
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
-}
-
-func userIDFromContext(ctx context.Context) (int64, bool) {
-	id, ok := ctx.Value(userIDContextKey{}).(int64)
-	return id, ok
 }
