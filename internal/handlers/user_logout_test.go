@@ -39,7 +39,7 @@ func TestUserHandlerLogout(t *testing.T) {
 					return nil
 				}}
 				rec := httptest.NewRecorder()
-				handlers.NewUserHandler(users, secure).Logout(rec, req)
+				handlers.NewUserHandler(users, secure, 5*1024*1024).Logout(rec, req)
 				if rec.Code != http.StatusNoContent || calls != 1 || rec.Body.Len() != 0 {
 					t.Fatalf("status = %d, calls = %d, body = %q; want 204, 1 and no body", rec.Code, calls, rec.Body.String())
 				}
@@ -69,7 +69,7 @@ func TestUserHandlerLogoutStorageError(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/auth/logout", nil)
 	req.AddCookie(&http.Cookie{Name: "chat_session", Value: "raw-token"})
 	rec := httptest.NewRecorder()
-	handlers.NewUserHandler(users, true).Logout(rec, req)
+	handlers.NewUserHandler(users, true, 5*1024*1024).Logout(rec, req)
 	if rec.Code != http.StatusInternalServerError || rec.Header().Get("Set-Cookie") != "" {
 		t.Fatalf("status = %d; want 500 without clearing the cookie when revocation fails", rec.Code)
 	}

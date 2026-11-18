@@ -54,7 +54,7 @@ func TestUserProfileHTTP(t *testing.T) {
 		return &user.User{ID: 42, Username: "ivan", Name: "Иван", PasswordHash: "private-hash", CreatedAt: now, UpdatedAt: now}, nil
 	}}
 	rec := httptest.NewRecorder()
-	newTestHTTPHandler(handlers.NewUserHandler(users, true), sessions).ServeHTTP(rec, req)
+	newTestHTTPHandler(handlers.NewUserHandler(users, true, 5*1024*1024), sessions).ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK || authCalls != 1 || lookupCalls != 1 {
 		t.Fatalf("status = %d, authentication calls = %d, lookups = %d; want 200, 1, 1", rec.Code, authCalls, lookupCalls)
 	}
@@ -96,7 +96,7 @@ func TestUserProfileHTTPRejectsUnauthenticatedRequests(t *testing.T) {
 				req.AddCookie(tt.cookie)
 			}
 			rec := httptest.NewRecorder()
-			newTestHTTPHandler(handlers.NewUserHandler(users, true), sessions).ServeHTTP(rec, req)
+			newTestHTTPHandler(handlers.NewUserHandler(users, true, 5*1024*1024), sessions).ServeHTTP(rec, req)
 			if rec.Code != http.StatusUnauthorized || rec.Body.String() != "{\"error\":\"invalid or expired session\"}\n" {
 				t.Fatalf("status = %d, body = %q; want 401 with the public session error", rec.Code, rec.Body.String())
 			}
@@ -132,7 +132,7 @@ func TestUserProfileHTTPErrors(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, "/users/42", nil)
 			req.AddCookie(&http.Cookie{Name: "chat_session", Value: "session-token"})
 			rec := httptest.NewRecorder()
-			newTestHTTPHandler(handlers.NewUserHandler(users, true), sessions).ServeHTTP(rec, req)
+			newTestHTTPHandler(handlers.NewUserHandler(users, true, 5*1024*1024), sessions).ServeHTTP(rec, req)
 			var body struct{ Error string }
 			if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 				t.Fatal(err)
@@ -158,7 +158,7 @@ func TestAuthRoutesRejectCrossOrigin(t *testing.T) {
 					req.Header.Set(name, value)
 				}
 				rec := httptest.NewRecorder()
-				newTestHTTPHandler(handlers.NewUserHandler(fakeUserService{}, true), unexpectedSessionAuthenticator(t)).ServeHTTP(rec, req)
+				newTestHTTPHandler(handlers.NewUserHandler(fakeUserService{}, true, 5*1024*1024), unexpectedSessionAuthenticator(t)).ServeHTTP(rec, req)
 				if rec.Code != http.StatusForbidden || rec.Header().Get("Content-Type") != "application/json" || rec.Header().Get("Set-Cookie") != "" {
 					t.Fatalf("cross-origin response status = %d, headers = %v; want JSON 403 without cookie", rec.Code, rec.Header())
 				}
@@ -175,7 +175,7 @@ func TestAuthRoutesRejectCrossOrigin(t *testing.T) {
 
 func TestPublicRoutesDoNotAuthenticateSessions(t *testing.T) {
 	users := fakeUserService{logout: func(context.Context, string) error { return nil }}
-	h := newTestHTTPHandler(handlers.NewUserHandler(users, true), unexpectedSessionAuthenticator(t))
+	h := newTestHTTPHandler(handlers.NewUserHandler(users, true, 5*1024*1024), unexpectedSessionAuthenticator(t))
 	for _, tt := range []struct {
 		method string
 		path   string
@@ -222,7 +222,7 @@ func TestUserProfileIDAccess(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, "/users/"+tt.id, nil)
 			req.AddCookie(&http.Cookie{Name: "chat_session", Value: "session-token"})
 			rec := httptest.NewRecorder()
-			newTestHTTPHandler(handlers.NewUserHandler(users, true), sessions).ServeHTTP(rec, req)
+			newTestHTTPHandler(handlers.NewUserHandler(users, true, 5*1024*1024), sessions).ServeHTTP(rec, req)
 			var body struct{ Error string }
 			if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 				t.Fatal(err)
@@ -249,7 +249,7 @@ func TestUserRouterRejectsUnsupportedMethods(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/users/42", nil)
 	req.AddCookie(&http.Cookie{Name: "chat_session", Value: "session-token"})
 	rec := httptest.NewRecorder()
-	newTestHTTPHandler(handlers.NewUserHandler(fakeUserService{}, true), sessions).ServeHTTP(rec, req)
+	newTestHTTPHandler(handlers.NewUserHandler(fakeUserService{}, true, 5*1024*1024), sessions).ServeHTTP(rec, req)
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("status = %d, want 405", rec.Code)
 	}
@@ -259,7 +259,7 @@ func TestUnknownPathRequiresSession(t *testing.T) {
 	sessions := fakeSessionAuthenticator(func(context.Context, string) (*session.Session, error) {
 		return &session.Session{UserID: 42}, nil
 	})
-	h := newTestHTTPHandler(handlers.NewUserHandler(fakeUserService{}, true), sessions)
+	h := newTestHTTPHandler(handlers.NewUserHandler(fakeUserService{}, true, 5*1024*1024), sessions)
 	for _, authenticated := range []bool{false, true} {
 		t.Run(fmt.Sprintf("authenticated_%v", authenticated), func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, "/missing", nil)

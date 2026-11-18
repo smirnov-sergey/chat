@@ -19,10 +19,15 @@ import (
 )
 
 type fakeUserService struct {
-	logout   func(context.Context, string) error
-	getByID  func(context.Context, int64) (*user.User, error)
-	register func(context.Context, string, string, string) (*service.UserSession, error)
-	login    func(context.Context, string, string) (*service.UserSession, error)
+	uploadPhoto func(context.Context, int64, []byte) error
+	logout      func(context.Context, string) error
+	getByID     func(context.Context, int64) (*user.User, error)
+	register    func(context.Context, string, string, string) (*service.UserSession, error)
+	login       func(context.Context, string, string) (*service.UserSession, error)
+}
+
+func (fake fakeUserService) UploadPhoto(ctx context.Context, id int64, data []byte) error {
+	return fake.uploadPhoto(ctx, id, data)
 }
 
 func (fake fakeUserService) Logout(ctx context.Context, token string) error {
@@ -68,7 +73,7 @@ func TestUserHandlerRegisterBodySizeBoundary(t *testing.T) {
 				req := httptest.NewRequest(http.MethodPost, "/auth/register", strings.NewReader(body))
 				req.Header.Set("Content-Type", "application/json")
 				rec := httptest.NewRecorder()
-				handlers.NewUserHandler(users, false).Register(rec, req)
+				handlers.NewUserHandler(users, false, 5*1024*1024).Register(rec, req)
 				if size == 4096 {
 					if rec.Code != http.StatusCreated || calls != 1 {
 						t.Fatalf("4096-byte body: status=%d, service calls=%d; want 201 and 1", rec.Code, calls)
@@ -106,7 +111,7 @@ func TestUserHandlerRegister(t *testing.T) {
 				}, nil
 			}}
 			rec := httptest.NewRecorder()
-			handlers.NewUserHandler(registration, secure).Register(rec, req)
+			handlers.NewUserHandler(registration, secure, 5*1024*1024).Register(rec, req)
 			if calls != 1 || rec.Code != http.StatusCreated {
 				t.Fatalf("calls = %d, status = %d; want 1, 201", calls, rec.Code)
 			}
@@ -171,7 +176,7 @@ func TestUserHandlerRegisterRejectsInvalidRequests(t *testing.T) {
 				req.Header.Set("Content-Type", tt.contentType)
 			}
 			rec := httptest.NewRecorder()
-			handlers.NewUserHandler(registration, true).Register(rec, req)
+			handlers.NewUserHandler(registration, true, 5*1024*1024).Register(rec, req)
 			if rec.Code != tt.status {
 				t.Fatalf("status = %d, want %d", rec.Code, tt.status)
 			}
@@ -200,7 +205,7 @@ func TestUserHandlerRegisterServiceErrors(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPost, "/auth/register", strings.NewReader(registrationBody))
 			req.Header.Set("Content-Type", "application/json")
 			rec := httptest.NewRecorder()
-			handlers.NewUserHandler(registration, true).Register(rec, req)
+			handlers.NewUserHandler(registration, true, 5*1024*1024).Register(rec, req)
 			if rec.Code != tt.status {
 				t.Fatalf("status = %d, want %d", rec.Code, tt.status)
 			}

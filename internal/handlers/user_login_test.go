@@ -39,7 +39,7 @@ func TestUserHandlerLoginBodySizeBoundary(t *testing.T) {
 				req := httptest.NewRequest(http.MethodPost, "/auth/login", strings.NewReader(body))
 				req.Header.Set("Content-Type", "application/json")
 				rec := httptest.NewRecorder()
-				handlers.NewUserHandler(users, false).Login(rec, req)
+				handlers.NewUserHandler(users, false, 5*1024*1024).Login(rec, req)
 				if size == 4096 {
 					if rec.Code != http.StatusOK || calls != 1 {
 						t.Fatalf("4096-byte body: status=%d, service calls=%d; want 200 and 1", rec.Code, calls)
@@ -77,7 +77,7 @@ func TestUserHandlerLogin(t *testing.T) {
 				}, nil
 			}}
 			rec := httptest.NewRecorder()
-			handlers.NewUserHandler(login, secure).Login(rec, req)
+			handlers.NewUserHandler(login, secure, 5*1024*1024).Login(rec, req)
 			if calls != 1 || rec.Code != http.StatusOK {
 				t.Fatalf("calls = %d, status = %d; want 1, 200", calls, rec.Code)
 			}
@@ -142,7 +142,7 @@ func TestUserHandlerLoginRejectsInvalidRequests(t *testing.T) {
 				req.Header.Set("Content-Type", tt.contentType)
 			}
 			rec := httptest.NewRecorder()
-			handlers.NewUserHandler(login, true).Login(rec, req)
+			handlers.NewUserHandler(login, true, 5*1024*1024).Login(rec, req)
 			if rec.Code != tt.status {
 				t.Fatalf("status = %d, want %d", rec.Code, tt.status)
 			}
@@ -168,7 +168,7 @@ func TestUserHandlerLoginServiceErrors(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPost, "/auth/login", strings.NewReader(loginBody))
 			req.Header.Set("Content-Type", "application/json")
 			rec := httptest.NewRecorder()
-			handlers.NewUserHandler(login, true).Login(rec, req)
+			handlers.NewUserHandler(login, true, 5*1024*1024).Login(rec, req)
 			if rec.Code != tt.status {
 				t.Fatalf("status = %d, want %d", rec.Code, tt.status)
 			}

@@ -122,7 +122,7 @@ func TestGetUserWithoutSession(t *testing.T) {
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/users/42", nil)
 	req.SetPathValue("id", "42")
-	NewUserHandler(nil, false).GetByID(rec, req)
+	NewUserHandler(nil, false, 5*1024*1024).GetByID(rec, req)
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want 401 when no verified user ID is present", rec.Code)
 	}

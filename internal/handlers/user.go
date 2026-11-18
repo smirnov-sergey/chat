@@ -21,15 +21,17 @@ type UserService interface {
 	Login(ctx context.Context, username, password string) (*service.UserSession, error)
 	Logout(ctx context.Context, token string) error
 	GetByID(ctx context.Context, id int64) (*user.User, error)
+	UploadPhoto(ctx context.Context, userID int64, data []byte) error
 }
 
 type UserHandler struct {
 	userService   UserService
 	secureCookies bool
+	maxPhotoSize  int64
 }
 
-func NewUserHandler(userService UserService, secureCookies bool) *UserHandler {
-	return &UserHandler{userService: userService, secureCookies: secureCookies}
+func NewUserHandler(userService UserService, secureCookies bool, maxPhotoSize int64) *UserHandler {
+	return &UserHandler{userService: userService, secureCookies: secureCookies, maxPhotoSize: maxPhotoSize}
 }
 
 func (h *UserHandler) Register(w http.ResponseWriter, r *http.Request) {
@@ -125,6 +127,40 @@ func (h *UserHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	}
 
 	clearSessionCookie(w, h.secureCookies)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *UserHandler) UploadPhoto(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+
+	id, err := parseUserID(r)
+	if err != nil {
+		handleError(w, err)
+		return
+	}
+
+	currentUserID, ok := userIDFromContext(r.Context())
+	if !ok {
+		handleError(w, session.ErrInvalid)
+		return
+	}
+
+	if currentUserID != id {
+		handleError(w, errAccessDenied)
+		return
+	}
+
+	data, err := readPhotoRequest(w, r, h.maxPhotoSize)
+	if err != nil {
+		handleError(w, err)
+		return
+	}
+
+	if err := h.userService.UploadPhoto(r.Context(), id, data); err != nil {
+		handleError(w, err)
+		return
+	}
+
 	w.WriteHeader(http.StatusNoContent)
 }
 

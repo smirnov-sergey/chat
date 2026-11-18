@@ -54,7 +54,7 @@ func TestUserLoginHTTP(t *testing.T) {
 		VALUES ('legacy', 'Без пароля', $1, $1)`, time.Now().UTC()); err != nil {
 		t.Fatal(err)
 	}
-	userHandler := handlers.NewUserHandler(users, false)
+	userHandler := handlers.NewUserHandler(users, false, 5*1024*1024)
 	appRouter := router.New(userHandler)
 	crossOriginProtectionMiddleware := handlers.CrossOriginProtectionMiddleware()
 	authRateLimitMiddleware := handlers.AuthRateLimitMiddleware()

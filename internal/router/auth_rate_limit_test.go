@@ -39,7 +39,7 @@ func TestAuthRoutesRateLimitBeforeService(t *testing.T) {
 					return nil
 				},
 			}
-			h := newTestHTTPHandler(handlers.NewUserHandler(users, false), unexpectedSessionAuthenticator(t))
+			h := newTestHTTPHandler(handlers.NewUserHandler(users, false, 5*1024*1024), unexpectedSessionAuthenticator(t))
 			for range tt.limit + 1 {
 				req := httptest.NewRequest(http.MethodPost, tt.path, strings.NewReader(tt.body))
 				req.Header.Set("Content-Type", "application/json")

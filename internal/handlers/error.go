@@ -7,6 +7,7 @@ import (
 
 	"chat/internal/model/session"
 	"chat/internal/model/user"
+	"chat/internal/photo"
 	"chat/internal/validation"
 )
 
@@ -40,6 +41,14 @@ func handleError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusRequestEntityTooLarge, errRequestBodyTooLarge)
 	case errors.Is(err, errUnsupportedMediaType):
 		writeError(w, http.StatusUnsupportedMediaType, errUnsupportedMediaType)
+	case errors.Is(err, errUnsupportedPhotoMediaType):
+		writeError(w, http.StatusUnsupportedMediaType, errUnsupportedPhotoMediaType)
+	case errors.Is(err, photo.ErrFileTooLarge):
+		writeError(w, http.StatusRequestEntityTooLarge, photo.ErrFileTooLarge)
+	case errors.Is(err, photo.ErrInvalidImage):
+		writeError(w, http.StatusBadRequest, photo.ErrInvalidImage)
+	case errors.Is(err, photo.ErrInvalidDimensions):
+		writeError(w, http.StatusBadRequest, photo.ErrInvalidDimensions)
 	case errors.Is(err, validation.ErrInvalidUsername):
 		writeError(w, http.StatusBadRequest, validation.ErrInvalidUsername)
 	case errors.Is(err, validation.ErrInvalidName):

@@ -53,7 +53,7 @@ func TestUserLogoutHTTP(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	appRouter := router.New(handlers.NewUserHandler(users, false))
+	appRouter := router.New(handlers.NewUserHandler(users, false, 5*1024*1024))
 	crossOriginProtectionMiddleware := handlers.CrossOriginProtectionMiddleware()
 	authRateLimitMiddleware := handlers.AuthRateLimitMiddleware()
 	sessionMiddleware := handlers.SessionMiddleware(sessions)

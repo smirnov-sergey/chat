@@ -16,10 +16,15 @@ import (
 )
 
 type fakeUserService struct {
-	logout   func(context.Context, string) error
-	getByID  func(context.Context, int64) (*user.User, error)
-	register func(context.Context, string, string, string) (*service.UserSession, error)
-	login    func(context.Context, string, string) (*service.UserSession, error)
+	uploadPhoto func(context.Context, int64, []byte) error
+	logout      func(context.Context, string) error
+	getByID     func(context.Context, int64) (*user.User, error)
+	register    func(context.Context, string, string, string) (*service.UserSession, error)
+	login       func(context.Context, string, string) (*service.UserSession, error)
+}
+
+func (fake fakeUserService) UploadPhoto(ctx context.Context, id int64, data []byte) error {
+	return fake.uploadPhoto(ctx, id, data)
 }
 
 func (fake fakeUserService) Logout(ctx context.Context, token string) error {
@@ -49,7 +54,7 @@ func newRouter(t *testing.T) http.Handler {
 		t.Fatal("login must not be called for this request")
 		return nil, nil
 	}}
-	return router.New(handlers.NewUserHandler(users, true))
+	return router.New(handlers.NewUserHandler(users, true, 5*1024*1024))
 }
 
 func TestHealth(t *testing.T) {
@@ -111,7 +116,7 @@ func TestRegistrationRoute(t *testing.T) {
 					Token: &session.Token{Value: "test-token", ExpiresAt: time.Now().Add(time.Hour)},
 				}, nil
 			}}
-			h := router.New(handlers.NewUserHandler(registration, true))
+			h := router.New(handlers.NewUserHandler(registration, true, 5*1024*1024))
 			req := httptest.NewRequest(http.MethodPost, "http://chat.local/auth/register",
 				strings.NewReader(`{"username":"ivan","name":"Иван","password":"long password phrase"}`))
 			req.Header.Set("Content-Type", "application/json")
@@ -141,7 +146,7 @@ func TestLoginRoute(t *testing.T) {
 					Token: &session.Token{Value: "test-token", ExpiresAt: time.Now().Add(time.Hour)},
 				}, nil
 			}}
-			h := router.New(handlers.NewUserHandler(users, true))
+			h := router.New(handlers.NewUserHandler(users, true, 5*1024*1024))
 			req := httptest.NewRequest(http.MethodPost, "http://chat.local/auth/login",
 				strings.NewReader(`{"username":"ivan","password":"long password phrase"}`))
 			req.Header.Set("Content-Type", "application/json")
@@ -158,7 +163,7 @@ func TestLoginRoute(t *testing.T) {
 }
 
 func TestUserProfileRouteRequiresVerifiedIdentity(t *testing.T) {
-	h := router.New(handlers.NewUserHandler(fakeUserService{}, true))
+	h := router.New(handlers.NewUserHandler(fakeUserService{}, true, 5*1024*1024))
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/users/42", nil))
 	if rec.Code != http.StatusUnauthorized {

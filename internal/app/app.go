@@ -67,7 +67,7 @@ func Run(ctx context.Context, cfg config.Config) error {
 		return fmt.Errorf("create user service: %w", err)
 	}
 
-	userHandler := handlers.NewUserHandler(userService, cfg.SessionCookieSecure)
+	userHandler := handlers.NewUserHandler(userService, cfg.SessionCookieSecure, cfg.MaxPhotoSize)
 
 	appRouter := router.New(userHandler)
 

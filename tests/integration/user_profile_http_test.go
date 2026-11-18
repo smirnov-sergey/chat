@@ -46,7 +46,7 @@ func TestUserProfileHTTP(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	userHandler := handlers.NewUserHandler(users, false)
+	userHandler := handlers.NewUserHandler(users, false, 5*1024*1024)
 	appRouter := router.New(userHandler)
 	crossOriginProtectionMiddleware := handlers.CrossOriginProtectionMiddleware()
 	authRateLimitMiddleware := handlers.AuthRateLimitMiddleware()
