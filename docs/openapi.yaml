@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: Chat API
-  description: HTTP API проекта Chat. Доступны проверка работоспособности, регистрация, вход, выход, чтение собственного профиля и загрузка фото.
+  description: HTTP API проекта Chat. Доступны проверка работоспособности, регистрация, вход, выход, чтение собственного профиля, загрузка и получение фото.
   version: 0.1.0
 
 servers:
@@ -363,6 +363,91 @@ paths:
                 error: internal server error
 
   /users/{id}/photo:
+    get:
+      summary: Получение фото профиля
+      description: |
+        Возвращает текущее фото указанного пользователя. Требует действующую
+        сессию в cookie chat_session; разрешено читать своё и чужое фото.
+        Сессия проверяется до разбора ID: без действующей сессии возвращается 401.
+
+        Ответ содержит байты PNG размером 256 × 256, а не JSON или ссылку на файл.
+        Исходный JPEG или PNG, загруженный пользователем, не возвращается.
+        Если фото не установлено или его файл отсутствует, возвращается 404.
+        Чтение не изменяет профиль, не продлевает сессию и не выдаёт новую cookie.
+      operationId: getUserPhoto
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Положительный ID пользователя, чьё фото запрашивается.
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+            maximum: 9223372036854775807
+          example: 42
+      responses:
+        '200':
+          description: Текущее фото пользователя в формате PNG. Set-Cookie не выдаётся.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+            X-Content-Type-Options:
+              schema:
+                type: string
+                const: nosniff
+            Content-Length:
+              description: Размер возвращаемого PNG в байтах.
+              schema:
+                type: integer
+                format: int64
+                minimum: 1
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: ID не является положительным целым числом в диапазоне int64.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: invalid user ID
+        '401':
+          description: Cookie отсутствует, токен некорректен либо сессия истекла или отозвана.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: invalid or expired session
+        '404':
+          description: Пользователь не найден, фото не установлено либо его файл отсутствует.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                userNotFound:
+                  value:
+                    error: user not found
+                photoNotFound:
+                  value:
+                    error: user photo not found
+        '500':
+          description: Внутренняя ошибка чтения файла или БД. Технические подробности клиенту не возвращаются.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: internal server error
     put:
       summary: Загрузка или замена фото профиля
       description: |
