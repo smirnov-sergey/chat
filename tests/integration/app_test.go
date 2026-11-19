@@ -120,19 +120,7 @@ func TestAppRunAuthentication(t *testing.T) {
 			req.Header.Set("Origin", "https://other.example")
 			req.Header.Set("Sec-Fetch-Site", "cross-site")
 		}
-		response, err := client.Do(req)
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer response.Body.Close()
-		data, err := io.ReadAll(response.Body)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if response.StatusCode != wantStatus {
-			t.Fatalf("%s %s: status=%d, want %d; body=%s", method, path, response.StatusCode, wantStatus, data)
-		}
-		return response, data
+		return doAppRequest(t, client, req, wantStatus)
 	}
 
 	const registration = `{"username":"ivan","name":"Иван","password":"long personal password"}`
@@ -178,18 +166,7 @@ func TestAppRunAuthentication(t *testing.T) {
 			if cookie != nil {
 				req.AddCookie(cookie)
 			}
-			response, err := client.Do(req)
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer response.Body.Close()
-			data, err := io.ReadAll(response.Body)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if response.StatusCode != wantStatus {
-				t.Fatalf("photo read: status=%d, want %d; body=%s", response.StatusCode, wantStatus, data)
-			}
+			response, data := doAppRequest(t, client, req, wantStatus)
 			if response.Header.Get("Cache-Control") != "no-store" || response.Header.Get("Set-Cookie") != "" {
 				t.Fatal("photo read must disable caching without replacing the session")
 			}
@@ -209,18 +186,7 @@ func TestAppRunAuthentication(t *testing.T) {
 			}
 			req.Header.Set("Content-Type", contentType)
 			req.AddCookie(cookies[0])
-			response, err := client.Do(req)
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer response.Body.Close()
-			body, err := io.ReadAll(response.Body)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if response.StatusCode != wantStatus {
-				t.Fatalf("photo upload: status=%d, want %d; body=%s", response.StatusCode, wantStatus, body)
-			}
+			response, body := doAppRequest(t, client, req, wantStatus)
 			if response.Header.Get("Cache-Control") != "no-store" || response.Header.Get("Set-Cookie") != "" {
 				t.Fatal("photo upload must disable caching and must not replace the session")
 			}
@@ -307,18 +273,7 @@ func TestAppRunAuthentication(t *testing.T) {
 				req.Header.Set("Origin", "https://other.example")
 				req.Header.Set("Sec-Fetch-Site", "cross-site")
 			}
-			response, err := client.Do(req)
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer response.Body.Close()
-			body, err := io.ReadAll(response.Body)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if response.StatusCode != wantStatus {
-				t.Fatalf("photo deletion: status=%d, want %d; body=%s", response.StatusCode, wantStatus, body)
-			}
+			response, body := doAppRequest(t, client, req, wantStatus)
 			if response.Header.Get("Set-Cookie") != "" {
 				t.Fatal("photo deletion must not replace the session")
 			}
@@ -376,4 +331,25 @@ func TestAppRunAuthentication(t *testing.T) {
 	if strings.TrimSpace(string(body)) != `{"error":"too many requests"}` || limited.Header.Get("Set-Cookie") != "" {
 		t.Fatal("rate limit response must contain the public error and no new session cookie")
 	}
+}
+
+func doAppRequest(t *testing.T, client *http.Client, req *http.Request, wantStatus int) (*http.Response, []byte) {
+	t.Helper()
+
+	response, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+
+	data, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if response.StatusCode != wantStatus {
+		t.Fatalf("%s %s: status=%d, want %d; body=%s", req.Method, req.URL.Path, response.StatusCode, wantStatus, data)
+	}
+
+	return response, data
 }
