@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: Chat API
-  description: HTTP API проекта Chat. Доступны проверка работоспособности, регистрация, вход, выход и чтение собственного профиля.
+  description: HTTP API проекта Chat. Доступны проверка работоспособности, регистрация, вход, выход, чтение собственного профиля и загрузка фото.
   version: 0.1.0
 
 servers:
@@ -355,6 +355,147 @@ paths:
                 error: user not found
         '500':
           description: Внутренняя ошибка. Технические подробности клиенту не возвращаются.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: internal server error
+
+  /users/{id}/photo:
+    put:
+      summary: Загрузка или замена фото профиля
+      description: |
+        Устанавливает единственное текущее фото пользователя.
+        Требует действующую сессию в cookie chat_session. ID из URL должен
+        совпадать с ID пользователя сессии; менять чужое фото запрещено.
+        Доступ проверяется до чтения тела запроса.
+
+        Тело содержит байты одного JPEG или PNG, без JSON, Base64 и multipart.
+        Размер ограничен обязательной настройкой MAX_PHOTO_SIZE в байтах;
+        в .env-example указано 5242880 (5 MiB). Ровно заданный лимит допускается.
+        Формат и размеры проверяются по содержимому изображения:
+        ширина и высота должны быть от 1 до 4096 пикселей.
+
+        Изображение обрезается до центрального квадрата и приводится к 256 × 256.
+        Результат кодируется в PNG с сохранением прозрачности.
+        Оригинал не сохраняется, EXIF-ориентация не учитывается.
+        При замене сервер сохраняет новый файл и обновляет ссылку в БД,
+        после чего удаляет предыдущий файл. updated_at отражает изменение профиля;
+        created_at, username, имя и пароль не меняются.
+        Сессия не продлевается и новая cookie не выдаётся.
+
+        Запросы браузера с чужого сайта отклоняются до обработки изображения.
+        UI и API должны иметь один origin; CORS не настроен.
+        Запросы CLI без Origin и Sec-Fetch-Site допускаются.
+      operationId: uploadUserPhoto
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Положительный ID пользователя; разрешена загрузка только собственного фото.
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+            maximum: 9223372036854775807
+          example: 42
+      requestBody:
+        required: true
+        description: Непустое бинарное тело с изображением; Content-Type соответствует одному из разрешённых типов.
+        content:
+          image/jpeg:
+            schema:
+              type: string
+              format: binary
+          image/png:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '204':
+          description: Фото установлено или заменено. Тело ответа отсутствует; Set-Cookie не выдаётся.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+        '400':
+          description: Некорректный ID, пустое или непрочитанное тело, повреждённое изображение либо недопустимые размеры.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidID:
+                  value:
+                    error: invalid user ID
+                invalidBody:
+                  value:
+                    error: invalid request body
+                invalidImage:
+                  value:
+                    error: photo must be a valid JPEG or PNG image
+                invalidDimensions:
+                  value:
+                    error: photo dimensions must be between 1 and 4096 pixels
+        '401':
+          description: Cookie отсутствует, токен некорректен либо сессия истекла или отозвана.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: invalid or expired session
+        '403':
+          description: Попытка изменить чужое фото либо запрос с чужого сайта.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                anotherUser:
+                  value:
+                    error: access denied
+                crossOrigin:
+                  value:
+                    error: cross-origin request blocked
+        '404':
+          description: Пользователь с собственным ID не найден.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: user not found
+        '413':
+          description: Размер тела превышает MAX_PHOTO_SIZE.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                requestTooLarge:
+                  value:
+                    error: request body too large
+                photoTooLarge:
+                  value:
+                    error: photo file is too large
+        '415':
+          description: Content-Type отсутствует, некорректен или отличается от image/jpeg и image/png.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: Content-Type must be image/jpeg or image/png
+        '500':
+          description: |
+            Внутренняя ошибка обработки, хранения или БД. Технические подробности
+            клиенту не возвращаются. При ошибке связи с БД результат обновления
+            может быть неопределённым: ответ не гарантирует сохранение прежнего фото.
           content:
             application/json:
               schema:
