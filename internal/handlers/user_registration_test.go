@@ -19,12 +19,17 @@ import (
 )
 
 type fakeUserService struct {
+	deletePhoto func(context.Context, int64) error
 	uploadPhoto func(context.Context, int64, []byte) error
 	getPhoto    func(context.Context, int64) ([]byte, error)
 	logout      func(context.Context, string) error
 	getByID     func(context.Context, int64) (*user.User, error)
 	register    func(context.Context, string, string, string) (*service.UserSession, error)
 	login       func(context.Context, string, string) (*service.UserSession, error)
+}
+
+func (fake fakeUserService) DeletePhoto(ctx context.Context, id int64) error {
+	return fake.deletePhoto(ctx, id)
 }
 
 func (fake fakeUserService) GetPhoto(ctx context.Context, id int64) ([]byte, error) {
