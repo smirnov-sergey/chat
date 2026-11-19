@@ -14,5 +14,6 @@ func New(userHandler *handlers.UserHandler) http.Handler {
 	mux.HandleFunc("POST /auth/logout", userHandler.Logout)
 	mux.HandleFunc("GET /users/{id}", userHandler.GetByID)
 	mux.HandleFunc("PUT /users/{id}/photo", userHandler.UploadPhoto)
+	mux.HandleFunc("GET /users/{id}/photo", userHandler.GetPhoto)
 	return mux
 }

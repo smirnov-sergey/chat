@@ -9,7 +9,59 @@ import (
 
 	"chat/internal/handlers"
 	"chat/internal/model/session"
+	"chat/internal/model/user"
 )
+
+func TestUserPhotoReadRoute(t *testing.T) {
+	for _, tt := range []struct {
+		name          string
+		path          string
+		authenticated bool
+		serviceError  error
+		status        int
+		wantID        int64
+	}{
+		{"own photo", "/users/42/photo", true, nil, http.StatusOK, 42},
+		{"another user's photo", "/users/43/photo", true, nil, http.StatusOK, 43},
+		{"missing session", "/users/42/photo", false, nil, http.StatusUnauthorized, 0},
+		{"invalid ID", "/users/invalid/photo", true, nil, http.StatusBadRequest, 0},
+		{"missing photo", "/users/42/photo", true, user.ErrPhotoNotFound, http.StatusNotFound, 42},
+		{"missing user", "/users/42/photo", true, user.ErrNotFound, http.StatusNotFound, 42},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			calls := 0
+			users := fakeUserService{getPhoto: func(ctx context.Context, id int64) ([]byte, error) {
+				calls++
+				if id != tt.wantID {
+					t.Fatalf("photo user ID=%d, want %d", id, tt.wantID)
+				}
+				return []byte("photo bytes"), tt.serviceError
+			}}
+			sessions := fakeSessionAuthenticator(func(context.Context, string) (*session.Session, error) {
+				return &session.Session{UserID: 42}, nil
+			})
+			req := httptest.NewRequest(http.MethodGet, tt.path, nil)
+			if tt.authenticated {
+				req.AddCookie(&http.Cookie{Name: "chat_session", Value: "session-token"})
+			}
+			rec := httptest.NewRecorder()
+			newTestHTTPHandler(handlers.NewUserHandler(users, false, 1024), sessions).ServeHTTP(rec, req)
+			if rec.Code != tt.status {
+				t.Fatalf("status=%d, want %d; body=%s", rec.Code, tt.status, rec.Body.String())
+			}
+			wantCalls := 0
+			if tt.wantID != 0 {
+				wantCalls = 1
+			}
+			if calls != wantCalls {
+				t.Fatalf("service calls=%d, want %d", calls, wantCalls)
+			}
+			if tt.status == http.StatusOK && (rec.Body.String() != "photo bytes" || rec.Header().Get("Content-Type") != "image/png") {
+				t.Fatal("route must return the photo bytes as PNG")
+			}
+		})
+	}
+}
 
 func TestUserPhotoUploadRoute(t *testing.T) {
 	for _, tt := range []struct {

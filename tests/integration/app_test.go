@@ -162,7 +162,45 @@ func TestAppRunAuthentication(t *testing.T) {
 		!storedProfile.UpdatedAt.Equal(profile.UpdatedAt.Truncate(time.Microsecond)) {
 		t.Fatalf("profile read = %+v, want registered profile %+v with microsecond timestamp precision", storedProfile, profile)
 	}
-	t.Run("profile photo upload and replacement", func(t *testing.T) {
+	otherRegistered, _ := request(http.MethodPost, "/auth/register",
+		`{"username":"anna","name":"Anna","password":"another long password"}`, nil, false, http.StatusCreated)
+	otherCookies := otherRegistered.Cookies()
+	if len(otherCookies) != 1 {
+		t.Fatal("second registration must create a session")
+	}
+	t.Run("profile photo upload, reading and replacement", func(t *testing.T) {
+		readPhoto := func(cookie *http.Cookie, wantStatus int) []byte {
+			t.Helper()
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+profilePath+"/photo", nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if cookie != nil {
+				req.AddCookie(cookie)
+			}
+			response, err := client.Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer response.Body.Close()
+			data, err := io.ReadAll(response.Body)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if response.StatusCode != wantStatus {
+				t.Fatalf("photo read: status=%d, want %d; body=%s", response.StatusCode, wantStatus, data)
+			}
+			if response.Header.Get("Cache-Control") != "no-store" || response.Header.Get("Set-Cookie") != "" {
+				t.Fatal("photo read must disable caching without replacing the session")
+			}
+			if wantStatus == http.StatusOK && (response.Header.Get("Content-Type") != "image/png" ||
+				response.Header.Get("X-Content-Type-Options") != "nosniff" || response.ContentLength != int64(len(data))) {
+				t.Fatal("photo read must return PNG with its exact content length and nosniff")
+			}
+			return data
+		}
+		readPhoto(nil, http.StatusUnauthorized)
+		readPhoto(cookies[0], http.StatusNotFound)
 		upload := func(data []byte, contentType string, wantStatus int) {
 			t.Helper()
 			req, err := http.NewRequestWithContext(ctx, http.MethodPut, baseURL+profilePath+"/photo", bytes.NewReader(data))
@@ -199,6 +237,11 @@ func TestAppRunAuthentication(t *testing.T) {
 			data, err := os.ReadFile(filepath.Join(storageDirectory, filename))
 			if err != nil {
 				t.Fatal(err)
+			}
+			for _, cookie := range []*http.Cookie{cookies[0], otherCookies[0]} {
+				if received := readPhoto(cookie, http.StatusOK); !bytes.Equal(received, data) {
+					t.Fatal("owner and another authenticated user must receive the current stored photo unchanged")
+				}
 			}
 			img, err := png.Decode(bytes.NewReader(data))
 			if err != nil || img.Bounds().Dx() != 256 || img.Bounds().Dy() != 256 {
