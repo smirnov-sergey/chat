@@ -89,20 +89,9 @@ func (h *UserHandler) Login(w http.ResponseWriter, r *http.Request) {
 func (h *UserHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 
-	id, err := parseUserID(r)
+	id, err := requireOwnUserID(r)
 	if err != nil {
 		handleError(w, err)
-		return
-	}
-
-	currentUserID, ok := userIDFromContext(r.Context())
-	if !ok {
-		handleError(w, session.ErrInvalid)
-		return
-	}
-
-	if currentUserID != id {
-		handleError(w, errAccessDenied)
 		return
 	}
 
@@ -135,20 +124,9 @@ func (h *UserHandler) Logout(w http.ResponseWriter, r *http.Request) {
 func (h *UserHandler) UploadPhoto(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 
-	id, err := parseUserID(r)
+	id, err := requireOwnUserID(r)
 	if err != nil {
 		handleError(w, err)
-		return
-	}
-
-	currentUserID, ok := userIDFromContext(r.Context())
-	if !ok {
-		handleError(w, session.ErrInvalid)
-		return
-	}
-
-	if currentUserID != id {
-		handleError(w, errAccessDenied)
 		return
 	}
 
@@ -192,20 +170,9 @@ func (h *UserHandler) GetPhoto(w http.ResponseWriter, r *http.Request) {
 func (h *UserHandler) DeletePhoto(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 
-	id, err := parseUserID(r)
+	id, err := requireOwnUserID(r)
 	if err != nil {
 		handleError(w, err)
-		return
-	}
-
-	currentUserID, ok := userIDFromContext(r.Context())
-	if !ok {
-		handleError(w, session.ErrInvalid)
-		return
-	}
-
-	if currentUserID != id {
-		handleError(w, errAccessDenied)
 		return
 	}
 
@@ -215,6 +182,24 @@ func (h *UserHandler) DeletePhoto(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func requireOwnUserID(r *http.Request) (int64, error) {
+	id, err := parseUserID(r)
+	if err != nil {
+		return 0, err
+	}
+
+	currentUserID, ok := userIDFromContext(r.Context())
+	if !ok {
+		return 0, session.ErrInvalid
+	}
+
+	if currentUserID != id {
+		return 0, errAccessDenied
+	}
+
+	return id, nil
 }
 
 func parseUserID(r *http.Request) (int64, error) {
