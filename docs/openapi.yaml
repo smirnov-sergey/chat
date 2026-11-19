@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: Chat API
-  description: HTTP API проекта Chat. Доступны проверка работоспособности, регистрация, вход, выход, чтение собственного профиля, загрузка и получение фото.
+  description: HTTP API проекта Chat. Доступны проверка работоспособности, регистрация, вход, выход, чтение собственного профиля, загрузка, получение и удаление фото.
   version: 0.1.0
 
 servers:
@@ -581,6 +581,96 @@ paths:
             Внутренняя ошибка обработки, хранения или БД. Технические подробности
             клиенту не возвращаются. При ошибке связи с БД результат обновления
             может быть неопределённым: ответ не гарантирует сохранение прежнего фото.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: internal server error
+
+    delete:
+      summary: Удаление фото профиля
+      description: |
+        Удаляет текущее фото пользователя. Требует действующую сессию в cookie
+        chat_session. ID из URL должен совпадать с ID пользователя сессии;
+        удалять чужое фото запрещено. Тело запроса не требуется.
+        Сессия проверяется до разбора ID: без действующей сессии возвращается 401.
+
+        Сервер сначала очищает ссылку на фото в БД, затем удаляет файл.
+        Ошибка удаления файла записывается в журнал и не отменяет успешное
+        изменение профиля: ответ остаётся 204, файл может остаться в хранилище.
+        При ошибке обновления БД сервер не приступает к удалению файла.
+        При ошибке связи с БД результат обновления может быть неопределённым.
+
+        Удаление установленного фото обновляет updated_at профиля.
+        Если фото уже отсутствует, запрос также возвращает 204,
+        при этом updated_at не меняется. Отсутствие фото не является ошибкой 404.
+        Сессия не продлевается и новая cookie не выдаётся.
+
+        Запросы браузера с чужого сайта отклоняются до изменения профиля.
+        UI и API должны иметь один origin; CORS не настроен.
+        Запросы CLI без Origin и Sec-Fetch-Site допускаются.
+      operationId: deleteUserPhoto
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Положительный ID пользователя; разрешено удаление только собственного фото.
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+            maximum: 9223372036854775807
+          example: 42
+      responses:
+        '204':
+          description: Фото удалено или уже отсутствует. Тело ответа отсутствует; Set-Cookie не выдаётся.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+        '400':
+          description: ID не является положительным целым числом в диапазоне int64.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: invalid user ID
+        '401':
+          description: Cookie отсутствует, токен некорректен либо сессия истекла или отозвана.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: invalid or expired session
+        '403':
+          description: Попытка удалить чужое фото либо запрос с чужого сайта.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                anotherUser:
+                  value:
+                    error: access denied
+                crossOrigin:
+                  value:
+                    error: cross-origin request blocked
+        '404':
+          description: Пользователь с собственным ID не найден.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: user not found
+        '500':
+          description: Внутренняя ошибка БД. Технические подробности клиенту не возвращаются.
           content:
             application/json:
               schema:
