@@ -15,5 +15,6 @@ func New(userHandler *handlers.UserHandler) http.Handler {
 	mux.HandleFunc("GET /users/{id}", userHandler.GetByID)
 	mux.HandleFunc("PUT /users/{id}/photo", userHandler.UploadPhoto)
 	mux.HandleFunc("GET /users/{id}/photo", userHandler.GetPhoto)
+	mux.HandleFunc("DELETE /users/{id}/photo", userHandler.DeletePhoto)
 	return mux
 }

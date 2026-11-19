@@ -63,6 +63,59 @@ func TestUserPhotoReadRoute(t *testing.T) {
 	}
 }
 
+func TestUserPhotoDeleteRoute(t *testing.T) {
+	for _, tt := range []struct {
+		name          string
+		path          string
+		authenticated bool
+		crossOrigin   bool
+		status        int
+	}{
+		{"own photo", "/users/42/photo", true, false, http.StatusNoContent},
+		{"missing session", "/users/42/photo", false, false, http.StatusUnauthorized},
+		{"another user", "/users/43/photo", true, false, http.StatusForbidden},
+		{"cross origin", "/users/42/photo", true, true, http.StatusForbidden},
+		{"invalid ID", "/users/invalid/photo", true, false, http.StatusBadRequest},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			calls := 0
+			users := fakeUserService{deletePhoto: func(ctx context.Context, id int64) error {
+				calls++
+				if id != 42 {
+					t.Fatalf("photo user ID=%d, want 42", id)
+				}
+				return nil
+			}}
+			sessions := fakeSessionAuthenticator(func(context.Context, string) (*session.Session, error) {
+				return &session.Session{UserID: 42}, nil
+			})
+			req := httptest.NewRequest(http.MethodDelete, tt.path, nil)
+			if tt.authenticated {
+				req.AddCookie(&http.Cookie{Name: "chat_session", Value: "session-token"})
+			}
+			if tt.crossOrigin {
+				req.Header.Set("Origin", "https://other.example")
+				req.Header.Set("Sec-Fetch-Site", "cross-site")
+			}
+			rec := httptest.NewRecorder()
+			newTestHTTPHandler(handlers.NewUserHandler(users, false, 1024), sessions).ServeHTTP(rec, req)
+			if rec.Code != tt.status {
+				t.Fatalf("status=%d, want %d; body=%s", rec.Code, tt.status, rec.Body.String())
+			}
+			wantCalls := 0
+			if tt.status == http.StatusNoContent {
+				wantCalls = 1
+				if rec.Body.Len() != 0 {
+					t.Fatal("successful deletion must have no response body")
+				}
+			}
+			if calls != wantCalls {
+				t.Fatalf("service calls=%d, want %d", calls, wantCalls)
+			}
+		})
+	}
+}
+
 func TestUserPhotoUploadRoute(t *testing.T) {
 	for _, tt := range []struct {
 		name          string

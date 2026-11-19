@@ -168,7 +168,7 @@ func TestAppRunAuthentication(t *testing.T) {
 	if len(otherCookies) != 1 {
 		t.Fatal("second registration must create a session")
 	}
-	t.Run("profile photo upload, reading and replacement", func(t *testing.T) {
+	t.Run("profile photo lifecycle", func(t *testing.T) {
 		readPhoto := func(cookie *http.Cookie, wantStatus int) []byte {
 			t.Helper()
 			req, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+profilePath+"/photo", nil)
@@ -293,6 +293,70 @@ func TestAppRunAuthentication(t *testing.T) {
 		entries, err := os.ReadDir(storageDirectory)
 		if err != nil || len(entries) != 1 {
 			t.Fatalf("storage must contain only the current photo: entries=%d, error=%v", len(entries), err)
+		}
+		deletePhoto := func(cookie *http.Cookie, crossOrigin bool, wantStatus int) {
+			t.Helper()
+			req, err := http.NewRequestWithContext(ctx, http.MethodDelete, baseURL+profilePath+"/photo", nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if cookie != nil {
+				req.AddCookie(cookie)
+			}
+			if crossOrigin {
+				req.Header.Set("Origin", "https://other.example")
+				req.Header.Set("Sec-Fetch-Site", "cross-site")
+			}
+			response, err := client.Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer response.Body.Close()
+			body, err := io.ReadAll(response.Body)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if response.StatusCode != wantStatus {
+				t.Fatalf("photo deletion: status=%d, want %d; body=%s", response.StatusCode, wantStatus, body)
+			}
+			if response.Header.Get("Set-Cookie") != "" {
+				t.Fatal("photo deletion must not replace the session")
+			}
+			if !crossOrigin && response.Header.Get("Cache-Control") != "no-store" {
+				t.Fatal("photo deletion handled after origin protection must disable caching")
+			}
+			if wantStatus == http.StatusNoContent && len(body) != 0 {
+				t.Fatal("successful photo deletion must have no response body")
+			}
+		}
+		deletePhoto(nil, false, http.StatusUnauthorized)
+		deletePhoto(otherCookies[0], false, http.StatusForbidden)
+		deletePhoto(cookies[0], true, http.StatusForbidden)
+		if filename := storedPhoto(green); filename != second {
+			t.Fatal("rejected deletion must preserve the photo")
+		}
+		deletePhoto(cookies[0], false, http.StatusNoContent)
+		var deletedPhoto *string
+		var updatedAt time.Time
+		if err := db.QueryRowContext(ctx, "SELECT photo, updated_at FROM users WHERE id = $1", profile.ID).Scan(&deletedPhoto, &updatedAt); err != nil {
+			t.Fatal(err)
+		}
+		if deletedPhoto != nil {
+			t.Fatal("deletion must clear the photo reference in PostgreSQL")
+		}
+		entries, err = os.ReadDir(storageDirectory)
+		if err != nil || len(entries) != 0 {
+			t.Fatalf("deletion must remove the current file: entries=%d, error=%v", len(entries), err)
+		}
+		readPhoto(cookies[0], http.StatusNotFound)
+		readPhoto(otherCookies[0], http.StatusNotFound)
+		deletePhoto(cookies[0], false, http.StatusNoContent)
+		var repeatedUpdatedAt time.Time
+		if err := db.QueryRowContext(ctx, "SELECT photo, updated_at FROM users WHERE id = $1", profile.ID).Scan(&deletedPhoto, &repeatedUpdatedAt); err != nil {
+			t.Fatal(err)
+		}
+		if deletedPhoto != nil || !repeatedUpdatedAt.Equal(updatedAt) {
+			t.Fatal("repeated deletion must keep the photo absent and updated_at unchanged")
 		}
 	})
 	request(http.MethodPost, "/auth/logout", "", cookies[0], false, http.StatusNoContent)
