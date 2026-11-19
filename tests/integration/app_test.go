@@ -3,9 +3,16 @@
 package integration_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"image"
+	"image/color"
+	"image/jpeg"
+	"image/png"
 	"io"
+	"math"
 	"net"
 	"net/http"
 	"os"
@@ -155,6 +162,96 @@ func TestAppRunAuthentication(t *testing.T) {
 		!storedProfile.UpdatedAt.Equal(profile.UpdatedAt.Truncate(time.Microsecond)) {
 		t.Fatalf("profile read = %+v, want registered profile %+v with microsecond timestamp precision", storedProfile, profile)
 	}
+	t.Run("profile photo upload and replacement", func(t *testing.T) {
+		upload := func(data []byte, contentType string, wantStatus int) {
+			t.Helper()
+			req, err := http.NewRequestWithContext(ctx, http.MethodPut, baseURL+profilePath+"/photo", bytes.NewReader(data))
+			if err != nil {
+				t.Fatal(err)
+			}
+			req.Header.Set("Content-Type", contentType)
+			req.AddCookie(cookies[0])
+			response, err := client.Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer response.Body.Close()
+			body, err := io.ReadAll(response.Body)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if response.StatusCode != wantStatus {
+				t.Fatalf("photo upload: status=%d, want %d; body=%s", response.StatusCode, wantStatus, body)
+			}
+			if response.Header.Get("Cache-Control") != "no-store" || response.Header.Get("Set-Cookie") != "" {
+				t.Fatal("photo upload must disable caching and must not replace the session")
+			}
+			if wantStatus == http.StatusNoContent && len(body) != 0 {
+				t.Fatal("successful photo upload must have no response body")
+			}
+		}
+		storedPhoto := func(want color.NRGBA) string {
+			t.Helper()
+			var filename string
+			if err := db.QueryRowContext(ctx, "SELECT photo FROM users WHERE id = $1", profile.ID).Scan(&filename); err != nil {
+				t.Fatal(err)
+			}
+			data, err := os.ReadFile(filepath.Join(storageDirectory, filename))
+			if err != nil {
+				t.Fatal(err)
+			}
+			img, err := png.Decode(bytes.NewReader(data))
+			if err != nil || img.Bounds().Dx() != 256 || img.Bounds().Dy() != 256 {
+				t.Fatalf("stored photo must be a 256 by 256 PNG: %v", err)
+			}
+			pixel := color.NRGBAModel.Convert(img.At(128, 128)).(color.NRGBA)
+			// JPEG decoding may slightly change color values.
+			if math.Abs(float64(pixel.R)-float64(want.R)) > 5 || math.Abs(float64(pixel.G)-float64(want.G)) > 5 ||
+				math.Abs(float64(pixel.B)-float64(want.B)) > 5 || pixel.A != want.A {
+				t.Fatalf("stored pixel=%+v, want approximately %+v", pixel, want)
+			}
+			return filename
+		}
+		source := image.NewNRGBA(image.Rect(0, 0, 16, 8))
+		red := color.NRGBA{R: 255, A: 255}
+		for y := range 8 {
+			for x := range 16 {
+				source.SetNRGBA(x, y, red)
+			}
+		}
+		var jpegData bytes.Buffer
+		if err := jpeg.Encode(&jpegData, source, &jpeg.Options{Quality: 100}); err != nil {
+			t.Fatal(err)
+		}
+		upload(jpegData.Bytes(), "image/jpeg", http.StatusNoContent)
+		first := storedPhoto(red)
+		green := color.NRGBA{G: 255, A: 128}
+		for y := range 8 {
+			for x := range 16 {
+				source.SetNRGBA(x, y, green)
+			}
+		}
+		var pngData bytes.Buffer
+		if err := png.Encode(&pngData, source); err != nil {
+			t.Fatal(err)
+		}
+		upload(pngData.Bytes(), "image/png", http.StatusNoContent)
+		second := storedPhoto(green)
+		if second == first {
+			t.Fatal("replacement must store a new file")
+		}
+		if _, err := os.Stat(filepath.Join(storageDirectory, first)); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("old photo must be removed after replacement: %v", err)
+		}
+		upload([]byte("not an image"), "image/png", http.StatusBadRequest)
+		if filename := storedPhoto(green); filename != second {
+			t.Fatal("invalid upload must preserve the previous photo reference and file")
+		}
+		entries, err := os.ReadDir(storageDirectory)
+		if err != nil || len(entries) != 1 {
+			t.Fatalf("storage must contain only the current photo: entries=%d, error=%v", len(entries), err)
+		}
+	})
 	request(http.MethodPost, "/auth/logout", "", cookies[0], false, http.StatusNoContent)
 	request(http.MethodGet, profilePath, "", cookies[0], false, http.StatusUnauthorized)
 
