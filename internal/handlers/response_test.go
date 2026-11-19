@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"bytes"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -8,6 +9,27 @@ import (
 
 	"chat/internal/dto"
 )
+
+func TestWritePNG(t *testing.T) {
+	data := []byte{137, 'P', 'N', 'G', 13, 10, 26, 10, 0}
+	rec := httptest.NewRecorder()
+	writePNG(rec, data)
+	if rec.Code != http.StatusOK || !bytes.Equal(rec.Body.Bytes(), data) {
+		t.Fatal("PNG response must preserve the binary data without appending a newline")
+	}
+	if rec.Header().Get("Content-Type") != "image/png" || rec.Header().Get("Content-Length") != "9" ||
+		rec.Header().Get("X-Content-Type-Options") != "nosniff" {
+		t.Fatalf("unexpected PNG headers: %v", rec.Header())
+	}
+}
+
+func TestWritePNGDoesNotRetryAfterWriteError(t *testing.T) {
+	w := &failedResponseWriter{header: make(http.Header)}
+	writePNG(w, []byte("PNG"))
+	if w.status != http.StatusOK || w.headerCalls != 1 || w.writeCalls != 1 {
+		t.Fatal("a failed binary response must not attempt a second response")
+	}
+}
 
 func TestWriteJSON(t *testing.T) {
 	for _, tt := range []struct {

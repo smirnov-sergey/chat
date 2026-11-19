@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"strconv"
 	"time"
 
 	"chat/internal/dto"
@@ -28,6 +29,17 @@ func writeJSON(w http.ResponseWriter, status int, response any) {
 	w.WriteHeader(status)
 	if _, err := w.Write(append(data, '\n')); err != nil {
 		log.Printf("write HTTP response: %v", err)
+	}
+}
+
+func writePNG(w http.ResponseWriter, data []byte) {
+	w.Header().Set("Content-Type", "image/png")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Content-Length", strconv.Itoa(len(data)))
+	w.WriteHeader(http.StatusOK)
+
+	if _, err := w.Write(data); err != nil {
+		log.Printf("write photo response: %v", err)
 	}
 }
 

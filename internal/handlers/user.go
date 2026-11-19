@@ -22,6 +22,7 @@ type UserService interface {
 	Logout(ctx context.Context, token string) error
 	GetByID(ctx context.Context, id int64) (*user.User, error)
 	UploadPhoto(ctx context.Context, userID int64, data []byte) error
+	GetPhoto(ctx context.Context, userID int64) ([]byte, error)
 }
 
 type UserHandler struct {
@@ -162,6 +163,29 @@ func (h *UserHandler) UploadPhoto(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *UserHandler) GetPhoto(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+
+	id, err := parseUserID(r)
+	if err != nil {
+		handleError(w, err)
+		return
+	}
+
+	if _, ok := userIDFromContext(r.Context()); !ok {
+		handleError(w, session.ErrInvalid)
+		return
+	}
+
+	data, err := h.userService.GetPhoto(r.Context(), id)
+	if err != nil {
+		handleError(w, err)
+		return
+	}
+
+	writePNG(w, data)
 }
 
 func parseUserID(r *http.Request) (int64, error) {

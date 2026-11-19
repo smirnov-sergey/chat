@@ -29,6 +29,8 @@ func handleError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusTooManyRequests, errTooManyRequests)
 	case errors.Is(err, user.ErrNotFound):
 		writeError(w, http.StatusNotFound, user.ErrNotFound)
+	case errors.Is(err, user.ErrPhotoNotFound):
+		writeError(w, http.StatusNotFound, user.ErrPhotoNotFound)
 	case errors.Is(err, errInvalidUserID):
 		writeError(w, http.StatusBadRequest, errInvalidUserID)
 	case errors.Is(err, errAccessDenied):
