@@ -58,20 +58,12 @@ func (repo *UserRepository) Create(ctx context.Context, u *user.User) error {
 }
 
 func (repo *UserRepository) GetByUsername(ctx context.Context, username string) (*user.User, error) {
-	var u user.User
-	err := repo.db.QueryRowContext(ctx, `
+	row := repo.db.QueryRowContext(ctx, `
 		SELECT id, username, name, created_at, updated_at, COALESCE(password_hash, ''), photo
 		FROM users
 		WHERE username = $1`, username,
-	).Scan(
-		&u.ID,
-		&u.Username,
-		&u.Name,
-		&u.CreatedAt,
-		&u.UpdatedAt,
-		&u.PasswordHash,
-		&u.Photo,
 	)
+	u, err := scanUser(row)
 
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, user.ErrNotFound
@@ -81,25 +73,16 @@ func (repo *UserRepository) GetByUsername(ctx context.Context, username string) 
 		return nil, fmt.Errorf("get user by username: %w", err)
 	}
 
-	return &u, nil
+	return u, nil
 }
 
 func (repo *UserRepository) GetByID(ctx context.Context, id int64) (*user.User, error) {
-	var u user.User
-
-	err := repo.db.QueryRowContext(ctx, `
+	row := repo.db.QueryRowContext(ctx, `
 		SELECT id, username, name, created_at, updated_at, COALESCE(password_hash, ''), photo
 		FROM users
 		WHERE id = $1`, id,
-	).Scan(
-		&u.ID,
-		&u.Username,
-		&u.Name,
-		&u.CreatedAt,
-		&u.UpdatedAt,
-		&u.PasswordHash,
-		&u.Photo,
 	)
+	u, err := scanUser(row)
 
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, user.ErrNotFound
@@ -109,7 +92,7 @@ func (repo *UserRepository) GetByID(ctx context.Context, id int64) (*user.User, 
 		return nil, fmt.Errorf("get user by ID: %w", err)
 	}
 
-	return &u, nil
+	return u, nil
 }
 
 func (repo *UserRepository) UpdatePhoto(ctx context.Context, id int64, photo *string, updatedAt time.Time) (*string, error) {
@@ -133,4 +116,20 @@ func (repo *UserRepository) UpdatePhoto(ctx context.Context, id int64, photo *st
 	}
 
 	return previous, nil
+}
+
+func scanUser(row *sql.Row) (*user.User, error) {
+	var u user.User
+	if err := row.Scan(
+		&u.ID,
+		&u.Username,
+		&u.Name,
+		&u.CreatedAt,
+		&u.UpdatedAt,
+		&u.PasswordHash,
+		&u.Photo,
+	); err != nil {
+		return nil, err
+	}
+	return &u, nil
 }
