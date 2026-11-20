@@ -1,0 +1,91 @@
+package service
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"strings"
+	"time"
+
+	"chat/internal/model/conversation"
+	"chat/internal/model/user"
+	"chat/internal/validation"
+)
+
+type ConversationUsers interface {
+	GetByUsername(ctx context.Context, username string) (*user.User, error)
+}
+
+type ConversationRepository interface {
+	GetDirectByUsers(ctx context.Context, firstUserID, secondUserID int64) (*conversation.Conversation, error)
+}
+
+type ConversationDirectStore interface {
+	Create(ctx context.Context, firstUserID, secondUserID int64, createdAt time.Time) (*conversation.Conversation, error)
+}
+
+type ConversationService struct {
+	users       ConversationUsers
+	repository  ConversationRepository
+	directStore ConversationDirectStore
+}
+
+func NewConversationService(
+	users ConversationUsers,
+	repository ConversationRepository,
+	directStore ConversationDirectStore,
+) *ConversationService {
+	return &ConversationService{
+		users:       users,
+		repository:  repository,
+		directStore: directStore,
+	}
+}
+
+func (s *ConversationService) CreateDirect(ctx context.Context, currentUserID int64, recipientUsername string) (*conversation.Conversation, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	if currentUserID <= 0 {
+		return nil, conversation.ErrInvalidParticipants
+	}
+
+	recipientUsername = strings.ToLower(strings.TrimSpace(recipientUsername))
+	if err := validation.ValidateUsername(recipientUsername); err != nil {
+		return nil, err
+	}
+
+	recipient, err := s.users.GetByUsername(ctx, recipientUsername)
+	if err != nil {
+		return nil, fmt.Errorf("find conversation user: %w", err)
+	}
+
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	if currentUserID == recipient.ID {
+		return nil, conversation.ErrInvalidParticipants
+	}
+
+	c, err := s.directStore.Create(ctx, currentUserID, recipient.ID, time.Now().UTC())
+	if errors.Is(err, conversation.ErrAlreadyExists) {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+
+		c, err = s.repository.GetDirectByUsers(ctx, currentUserID, recipient.ID)
+		if err != nil {
+			return nil, fmt.Errorf("get existing direct conversation: %w", err)
+		}
+
+		return c, nil
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("create direct conversation: %w", err)
+	}
+
+	return c, nil
+}
