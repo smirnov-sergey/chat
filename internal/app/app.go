@@ -69,7 +69,12 @@ func Run(ctx context.Context, cfg config.Config) error {
 
 	userHandler := handlers.NewUserHandler(userService, cfg.SessionCookieSecure, cfg.MaxPhotoSize)
 
-	appRouter := router.New(userHandler)
+	conversationRepository := repository.NewConversationRepository(db)
+	conversationDirectStore := repository.NewConversationDirectStore(db)
+	conversationService := service.NewConversationService(userRepository, conversationRepository, conversationDirectStore)
+	conversationHandler := handlers.NewConversationHandler(conversationService)
+
+	appRouter := router.New(userHandler, conversationHandler)
 
 	crossOriginProtectionMiddleware := handlers.CrossOriginProtectionMiddleware()
 	authRateLimitMiddleware := handlers.AuthRateLimitMiddleware()

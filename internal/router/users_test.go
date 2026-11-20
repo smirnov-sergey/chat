@@ -235,7 +235,7 @@ func TestUserProfileIDAccess(t *testing.T) {
 }
 
 func newTestHTTPHandler(userHandler *handlers.UserHandler, sessions handlers.SessionAuthenticator) http.Handler {
-	appRouter := router.New(userHandler)
+	appRouter := router.New(userHandler, handlers.NewConversationHandler(nil))
 	crossOriginProtectionMiddleware := handlers.CrossOriginProtectionMiddleware()
 	authRateLimitMiddleware := handlers.AuthRateLimitMiddleware()
 	sessionMiddleware := handlers.SessionMiddleware(sessions)

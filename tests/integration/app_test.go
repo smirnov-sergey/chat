@@ -156,6 +156,9 @@ func TestAppRunAuthentication(t *testing.T) {
 	if len(otherCookies) != 1 {
 		t.Fatal("second registration must create a session")
 	}
+	t.Run("direct conversation", func(t *testing.T) {
+		testAppConversationDirect(t, ctx, db, client, baseURL, cookies[0], otherCookies[0])
+	})
 	t.Run("profile photo lifecycle", func(t *testing.T) {
 		readPhoto := func(cookie *http.Cookie, wantStatus int) []byte {
 			t.Helper()
@@ -315,6 +318,7 @@ func TestAppRunAuthentication(t *testing.T) {
 		}
 	})
 	request(http.MethodPost, "/auth/logout", "", cookies[0], false, http.StatusNoContent)
+	request(http.MethodPost, "/conversations/direct", `{"recipient_username":"anna"}`, cookies[0], false, http.StatusUnauthorized)
 	request(http.MethodGet, profilePath, "", cookies[0], false, http.StatusUnauthorized)
 
 	const login = `{"username":"ivan","password":"long personal password"}`
