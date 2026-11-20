@@ -207,17 +207,17 @@ Handler проверяет владельца перед изменением ф
 
 ---
 
-# Переписки: согласованная схема следующего этапа
+# Переписки: схема хранения
 
-**Ещё не реализовано.** В этапе 6 добавляются общие данные переписки,
-участники и ограничения прямого диалога. Бизнес-правила описаны в
-`DOMAIN_MODEL.md`; текущая схема БД пока содержит только пользователей и сессии.
+Миграция `00005_create_conversations.sql` добавляет общие данные переписки,
+участников и ограничения прямого диалога. Прикладной сценарий и HTTP API
+ещё не реализованы. Бизнес-правила описаны в `DOMAIN_MODEL.md`.
 
 | Таблица | Поля и ограничения |
 | --- | --- |
 | `conversations` | `id` — PK; `type` — тип переписки; `created_at` — дата создания |
 | `conversations_members` | `conversation_id` — FK на переписку; `user_id` — FK на пользователя; составной PK `(conversation_id, user_id)` |
-| `conversations_direct` | `conversation_id` — PK и FK на переписку; `user_low_id`, `user_high_id` — FK на пользователей; CHECK `user_low_id < user_high_id`; UNIQUE `(user_low_id, user_high_id)` |
+| `conversations_direct` | `conversation_id` — PK и FK на переписку; `low_user_id`, `high_user_id` — FK на пользователей; CHECK `low_user_id < high_user_id`; UNIQUE `(low_user_id, high_user_id)` |
 
 Для поиска переписок пользователя нужен дополнительный индекс
 `conversations_members (user_id, conversation_id)`. Первичный ключ этой
