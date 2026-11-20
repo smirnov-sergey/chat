@@ -286,6 +286,89 @@ func TestConversationRepositoryGetDirectByUsers(t *testing.T) {
 	assertConversationCounts(t, ctx, db, 0, 0, 0)
 }
 
+func TestConversationRepositoryGetByIDForUser(t *testing.T) {
+	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
+	defer cancel()
+	db, ids := conversationTestDB(t, ctx)
+	store := repository.NewConversationDirectStore(db)
+	repo := repository.NewConversationRepository(db)
+	now := time.Date(2026, 11, 20, 12, 0, 0, 123456000, time.UTC)
+	first, err := store.Create(ctx, ids[0], ids[1], now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := store.Create(ctx, ids[1], ids[2], now.Add(time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, tt := range []struct {
+		name   string
+		userID int64
+		want   *conversation.Conversation
+	}{
+		{"first participant", ids[0], first},
+		{"second participant", ids[1], first},
+		{"participant in multiple dialogues", ids[1], second},
+		{"participant in another dialogue", ids[2], second},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := repo.GetByIDForUser(ctx, tt.want.ID, tt.userID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got == nil || got.ID != tt.want.ID || got.Type != tt.want.Type || !got.CreatedAt.Equal(tt.want.CreatedAt) {
+				t.Fatalf("conversation = %+v, want %+v", got, tt.want)
+			}
+		})
+	}
+
+	for _, tt := range []struct {
+		name           string
+		conversationID int64
+		userID         int64
+	}{
+		{"outsider", first.ID, ids[2]},
+		{"membership in another dialogue grants no access", second.ID, ids[0]},
+		{"unknown conversation", second.ID + 1, ids[0]},
+		{"unknown user", first.ID, ids[2] + 1},
+		{"zero conversation ID", 0, ids[0]},
+		{"negative conversation ID", -1, ids[0]},
+		{"zero user ID", first.ID, 0},
+		{"negative user ID", first.ID, -1},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := repo.GetByIDForUser(ctx, tt.conversationID, tt.userID)
+			if got != nil || !errors.Is(err, conversation.ErrNotFound) {
+				t.Fatalf("result = (%+v, %v), want nil and ErrNotFound", got, err)
+			}
+		})
+	}
+
+	t.Run("canceled context", func(t *testing.T) {
+		canceled, stop := context.WithCancel(ctx)
+		stop()
+		got, err := repo.GetByIDForUser(canceled, first.ID, ids[0])
+		if got != nil || !errors.Is(err, context.Canceled) {
+			t.Fatalf("result = (%+v, %v), want nil and context.Canceled", got, err)
+		}
+	})
+
+	assertConversationDirect(t, ctx, db, first, ids[0], ids[1])
+	assertConversationDirect(t, ctx, db, second, ids[1], ids[2])
+	assertConversationCounts(t, ctx, db, 2, 2, 4)
+
+	t.Run("database failure is not missing conversation", func(t *testing.T) {
+		if err := db.Close(); err != nil {
+			t.Fatal(err)
+		}
+		got, err := repo.GetByIDForUser(ctx, first.ID, ids[0])
+		if got != nil || err == nil || errors.Is(err, conversation.ErrNotFound) {
+			t.Fatalf("result = (%+v, %v), want a storage error, not ErrNotFound", got, err)
+		}
+	})
+}
+
 func TestConversationRepositoryCreate(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
 	defer cancel()

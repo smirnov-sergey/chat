@@ -49,15 +49,15 @@ func (repo *ConversationRepository) GetDirectByUsers(ctx context.Context, firstU
 	lowUserID := min(firstUserID, secondUserID)
 	highUserID := max(firstUserID, secondUserID)
 
-	var c conversation.Conversation
-	err := repo.db.QueryRowContext(ctx, `
+	row := repo.db.QueryRowContext(ctx, `
 		SELECT c.id, c.type, c.created_at
 		FROM conversations c
 			JOIN conversations_direct d ON d.conversation_id = c.id
 		WHERE d.low_user_id = $1 AND d.high_user_id = $2`,
 		lowUserID,
 		highUserID,
-	).Scan(&c.ID, &c.Type, &c.CreatedAt)
+	)
+	c, err := scanConversation(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, conversation.ErrNotFound
 	}
@@ -66,7 +66,29 @@ func (repo *ConversationRepository) GetDirectByUsers(ctx context.Context, firstU
 		return nil, fmt.Errorf("get direct conversation by users: %w", err)
 	}
 
-	return &c, nil
+	return c, nil
+}
+
+func (repo *ConversationRepository) GetByIDForUser(ctx context.Context, conversationID, currentUserID int64) (*conversation.Conversation, error) {
+	row := repo.db.QueryRowContext(ctx, `
+		SELECT c.id, c.type, c.created_at
+		FROM conversations c
+			JOIN conversations_members m ON m.conversation_id = c.id
+		WHERE c.id = $1 AND m.user_id = $2`,
+		conversationID,
+		currentUserID,
+	)
+
+	c, err := scanConversation(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, conversation.ErrNotFound
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("get conversation by ID for user: %w", err)
+	}
+
+	return c, nil
 }
 
 func (repo *ConversationRepository) createDirect(ctx context.Context, conversationID, lowUserID, highUserID int64) error {
@@ -108,4 +130,13 @@ func (repo *ConversationRepository) createMembers(ctx context.Context, conversat
 	}
 
 	return nil
+}
+
+func scanConversation(row *sql.Row) (*conversation.Conversation, error) {
+	var c conversation.Conversation
+	if err := row.Scan(&c.ID, &c.Type, &c.CreatedAt); err != nil {
+		return nil, err
+	}
+
+	return &c, nil
 }
