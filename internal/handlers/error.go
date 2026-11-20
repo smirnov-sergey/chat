@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 
+	"chat/internal/model/conversation"
 	"chat/internal/model/session"
 	"chat/internal/model/user"
 	"chat/internal/photo"
@@ -29,6 +30,10 @@ func handleError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusTooManyRequests, errTooManyRequests)
 	case errors.Is(err, user.ErrNotFound):
 		writeError(w, http.StatusNotFound, user.ErrNotFound)
+	case errors.Is(err, conversation.ErrNotFound):
+		writeError(w, http.StatusNotFound, conversation.ErrNotFound)
+	case errors.Is(err, conversation.ErrInvalidParticipants):
+		writeError(w, http.StatusBadRequest, conversation.ErrInvalidParticipants)
 	case errors.Is(err, user.ErrPhotoNotFound):
 		writeError(w, http.StatusNotFound, user.ErrPhotoNotFound)
 	case errors.Is(err, errInvalidUserID):
