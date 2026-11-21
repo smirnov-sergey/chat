@@ -11,6 +11,7 @@ import (
 )
 
 type conversationQueryer interface {
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
 	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
 }
@@ -89,6 +90,36 @@ func (repo *ConversationRepository) GetByIDForUser(ctx context.Context, conversa
 	}
 
 	return c, nil
+}
+
+func (repo *ConversationRepository) ListByUser(ctx context.Context, currentUserID int64) ([]conversation.Conversation, error) {
+	rows, err := repo.db.QueryContext(ctx, `
+		SELECT c.id, c.type, c.created_at
+		FROM conversations c
+			JOIN conversations_members m ON m.conversation_id = c.id
+		WHERE m.user_id = $1
+		ORDER BY c.created_at DESC, c.id DESC`,
+		currentUserID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list user conversations: %w", err)
+	}
+	defer rows.Close()
+
+	conversations := make([]conversation.Conversation, 0)
+	for rows.Next() {
+		var c conversation.Conversation
+		if err := rows.Scan(&c.ID, &c.Type, &c.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scan user conversation: %w", err)
+		}
+		conversations = append(conversations, c)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read user conversations: %w", err)
+	}
+
+	return conversations, nil
 }
 
 func (repo *ConversationRepository) createDirect(ctx context.Context, conversationID, lowUserID, highUserID int64) error {
