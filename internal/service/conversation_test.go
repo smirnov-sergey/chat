@@ -22,9 +22,14 @@ func (fake fakeConversationUsers) GetByUsername(ctx context.Context, username st
 }
 
 type fakeConversationRepository struct {
-	listByUser       func(context.Context, int64) ([]conversation.Conversation, error)
-	getDirectByUsers func(context.Context, int64, int64) (*conversation.Conversation, error)
-	getByIDForUser   func(context.Context, int64, int64) (*conversation.Conversation, error)
+	getPersonalByUser func(context.Context, int64) (*conversation.Conversation, error)
+	listByUser        func(context.Context, int64) ([]conversation.Conversation, error)
+	getDirectByUsers  func(context.Context, int64, int64) (*conversation.Conversation, error)
+	getByIDForUser    func(context.Context, int64, int64) (*conversation.Conversation, error)
+}
+
+func (fake fakeConversationRepository) GetPersonalByUser(ctx context.Context, userID int64) (*conversation.Conversation, error) {
+	return fake.getPersonalByUser(ctx, userID)
 }
 
 func (fake fakeConversationRepository) ListByUser(ctx context.Context, currentUserID int64) ([]conversation.Conversation, error) {
@@ -98,7 +103,7 @@ func TestConversationServiceCreateDirect(t *testing.T) {
 				calls = append(calls, "lookup")
 				return want, nil
 			}}
-			got, err := service.NewConversationService(users, repo, store).CreateDirect(ctx, 10, tt.username)
+			got, err := service.NewConversationService(users, repo, store, nil).CreateDirect(ctx, 10, tt.username)
 			if err != nil || got != want {
 				t.Fatalf("CreateDirect = (%+v, %v), want the stored conversation", got, err)
 			}
@@ -132,7 +137,7 @@ func TestConversationServiceCreateDirectInvalidInput(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			// No dependency may be called for invalid input.
-			s := service.NewConversationService(nil, nil, nil)
+			s := service.NewConversationService(nil, nil, nil, nil)
 			got, err := s.CreateDirect(t.Context(), tt.userID, tt.username)
 			if got != nil || !errors.Is(err, tt.want) {
 				t.Fatalf("CreateDirect = (%+v, %v), want nil and %v", got, err, tt.want)
@@ -191,7 +196,7 @@ func TestConversationServiceCreateDirectFailures(t *testing.T) {
 				calls = append(calls, "lookup")
 				return nil, tt.readError
 			}}
-			got, err := service.NewConversationService(users, repo, store).CreateDirect(ctx, 10, " ANNA ")
+			got, err := service.NewConversationService(users, repo, store, nil).CreateDirect(ctx, 10, " ANNA ")
 			if got != nil || !errors.Is(err, tt.want) {
 				t.Fatalf("CreateDirect = (%+v, %v), want nil and %v", got, err, tt.want)
 			}

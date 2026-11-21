@@ -20,27 +20,35 @@ type ConversationRepository interface {
 	ListByUser(ctx context.Context, currentUserID int64) ([]conversation.Conversation, error)
 	GetByIDForUser(ctx context.Context, conversationID, currentUserID int64) (*conversation.Conversation, error)
 	GetDirectByUsers(ctx context.Context, firstUserID, secondUserID int64) (*conversation.Conversation, error)
+	GetPersonalByUser(ctx context.Context, userID int64) (*conversation.Conversation, error)
 }
 
 type ConversationDirectStore interface {
 	Create(ctx context.Context, firstUserID, secondUserID int64, createdAt time.Time) (*conversation.Conversation, error)
 }
 
+type ConversationPersonalStore interface {
+	Create(ctx context.Context, userID int64, createdAt time.Time) (*conversation.Conversation, error)
+}
+
 type ConversationService struct {
-	users       ConversationUsers
-	repository  ConversationRepository
-	directStore ConversationDirectStore
+	users         ConversationUsers
+	repository    ConversationRepository
+	directStore   ConversationDirectStore
+	personalStore ConversationPersonalStore
 }
 
 func NewConversationService(
 	users ConversationUsers,
 	repository ConversationRepository,
 	directStore ConversationDirectStore,
+	personalStore ConversationPersonalStore,
 ) *ConversationService {
 	return &ConversationService{
-		users:       users,
-		repository:  repository,
-		directStore: directStore,
+		users:         users,
+		repository:    repository,
+		directStore:   directStore,
+		personalStore: personalStore,
 	}
 }
 
@@ -121,6 +129,36 @@ func (s *ConversationService) CreateDirect(ctx context.Context, currentUserID in
 
 	if err != nil {
 		return nil, fmt.Errorf("create direct conversation: %w", err)
+	}
+
+	return c, nil
+}
+
+func (s *ConversationService) CreatePersonal(ctx context.Context, currentUserID int64) (*conversation.Conversation, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	if currentUserID <= 0 {
+		return nil, user.ErrNotFound
+	}
+
+	c, err := s.personalStore.Create(ctx, currentUserID, time.Now().UTC())
+	if errors.Is(err, conversation.ErrAlreadyExists) {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+
+		c, err = s.repository.GetPersonalByUser(ctx, currentUserID)
+		if err != nil {
+			return nil, fmt.Errorf("get existing personal conversation: %w", err)
+		}
+
+		return c, nil
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("create personal conversation: %w", err)
 	}
 
 	return c, nil

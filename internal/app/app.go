@@ -71,7 +71,8 @@ func Run(ctx context.Context, cfg config.Config) error {
 
 	conversationRepository := repository.NewConversationRepository(db)
 	conversationDirectStore := repository.NewConversationDirectStore(db)
-	conversationService := service.NewConversationService(userRepository, conversationRepository, conversationDirectStore)
+	conversationPersonalStore := repository.NewConversationPersonalStore(db)
+	conversationService := service.NewConversationService(userRepository, conversationRepository, conversationDirectStore, conversationPersonalStore)
 	conversationHandler := handlers.NewConversationHandler(conversationService)
 
 	appRouter := router.New(userHandler, conversationHandler)
