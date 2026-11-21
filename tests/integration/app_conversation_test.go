@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -90,4 +91,70 @@ func testAppConversationDirect(t *testing.T, ctx context.Context, db *sql.DB, cl
 	}
 	assertConversationDirect(t, ctx, db, stored, ivan.ID, anna.ID)
 	assertConversationCounts(t, ctx, db, 1, 1, 2)
+	testAppConversationRead(t, ctx, client, baseURL, first, firstCookie, secondCookie)
+	assertConversationDirect(t, ctx, db, stored, ivan.ID, anna.ID)
+	assertConversationCounts(t, ctx, db, 1, 1, 2)
+}
+
+func testAppConversationRead(t *testing.T, ctx context.Context, client *http.Client, baseURL string, want dto.ConversationResponse, firstCookie, secondCookie *http.Cookie) {
+	t.Helper()
+	read := func(id string, cookie *http.Cookie, wantStatus int) []byte {
+		t.Helper()
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+"/conversations/"+id+"?user_id=999", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Set("X-User-ID", "999")
+		if cookie != nil {
+			req.AddCookie(cookie)
+		}
+		response, data := doAppRequest(t, client, req, wantStatus)
+		if response.Header.Get("Content-Type") != "application/json" || response.Header.Get("Cache-Control") != "no-store" || response.Header.Get("Set-Cookie") != "" {
+			t.Fatal("reading must return JSON without caching or changing the session cookie")
+		}
+		return data
+	}
+
+	id := strconv.FormatInt(want.ID, 10)
+	read(id, nil, http.StatusUnauthorized)
+	read("invalid", nil, http.StatusUnauthorized)
+	read("invalid", firstCookie, http.StatusBadRequest)
+	for _, cookie := range []*http.Cookie{firstCookie, secondCookie} {
+		var got dto.ConversationResponse
+		if err := json.Unmarshal(read(id, cookie, http.StatusOK), &got); err != nil {
+			t.Fatal(err)
+		}
+		if got.ID != want.ID || got.Type != want.Type || !got.CreatedAt.Equal(want.CreatedAt) {
+			t.Fatalf("read = %+v, want %+v", got, want)
+		}
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/auth/register",
+		strings.NewReader(`{"username":"oleg","name":"Oleg","password":"third personal password"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	registered, _ := doAppRequest(t, client, req, http.StatusCreated)
+	cookies := registered.Cookies()
+	if len(cookies) != 1 {
+		t.Fatal("third registration must create a session")
+	}
+	outsider := read(id, cookies[0], http.StatusNotFound)
+	missing := read("9223372036854775807", firstCookie, http.StatusNotFound)
+	if string(outsider) != string(missing) {
+		t.Fatal("outsider and missing conversation must receive identical responses")
+	}
+	var body map[string]string
+	if err := json.Unmarshal(outsider, &body); err != nil || len(body) != 1 || body["error"] != conversation.ErrNotFound.Error() {
+		t.Fatalf("unexpected inaccessible conversation response: %s", outsider)
+	}
+
+	logout, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/auth/logout", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	logout.AddCookie(cookies[0])
+	doAppRequest(t, client, logout, http.StatusNoContent)
+	read(id, cookies[0], http.StatusUnauthorized)
 }
