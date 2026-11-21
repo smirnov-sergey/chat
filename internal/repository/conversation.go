@@ -70,6 +70,26 @@ func (repo *ConversationRepository) GetDirectByUsers(ctx context.Context, firstU
 	return c, nil
 }
 
+func (repo *ConversationRepository) GetPersonalByUser(ctx context.Context, userID int64) (*conversation.Conversation, error) {
+	row := repo.db.QueryRowContext(ctx, `
+		SELECT c.id, c.type, c.created_at
+		FROM conversations c
+			JOIN conversations_personal p ON p.conversation_id = c.id
+		WHERE p.user_id = $1`,
+		userID,
+	)
+	c, err := scanConversation(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, conversation.ErrNotFound
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("get personal conversation by user: %w", err)
+	}
+
+	return c, nil
+}
+
 func (repo *ConversationRepository) GetByIDForUser(ctx context.Context, conversationID, currentUserID int64) (*conversation.Conversation, error) {
 	row := repo.db.QueryRowContext(ctx, `
 		SELECT c.id, c.type, c.created_at
@@ -141,6 +161,28 @@ func (repo *ConversationRepository) createDirect(ctx context.Context, conversati
 
 	if err != nil {
 		return fmt.Errorf("create direct conversation pair: %w", err)
+	}
+
+	return nil
+}
+
+func (repo *ConversationRepository) createPersonal(ctx context.Context, conversationID, userID int64) error {
+	var id int64
+
+	err := repo.db.QueryRowContext(ctx, `
+		INSERT INTO conversations_personal (conversation_id, user_id)
+		VALUES ($1, $2)
+		ON CONFLICT (user_id) DO NOTHING
+		RETURNING conversation_id`,
+		conversationID,
+		userID,
+	).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return conversation.ErrAlreadyExists
+	}
+
+	if err != nil {
+		return fmt.Errorf("create personal conversation owner: %w", err)
 	}
 
 	return nil
