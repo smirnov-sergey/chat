@@ -22,8 +22,13 @@ func (fake fakeConversationUsers) GetByUsername(ctx context.Context, username st
 }
 
 type fakeConversationRepository struct {
+	listByUser       func(context.Context, int64) ([]conversation.Conversation, error)
 	getDirectByUsers func(context.Context, int64, int64) (*conversation.Conversation, error)
 	getByIDForUser   func(context.Context, int64, int64) (*conversation.Conversation, error)
+}
+
+func (fake fakeConversationRepository) ListByUser(ctx context.Context, currentUserID int64) ([]conversation.Conversation, error) {
+	return fake.listByUser(ctx, currentUserID)
 }
 
 func (fake fakeConversationRepository) GetDirectByUsers(ctx context.Context, firstUserID, secondUserID int64) (*conversation.Conversation, error) {
