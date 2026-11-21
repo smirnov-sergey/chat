@@ -13,13 +13,20 @@ import (
 	"chat/internal/router"
 )
 
-type fakeConversationService func(context.Context, int64, string) (*conversation.Conversation, error)
-
-func (fake fakeConversationService) CreateDirect(ctx context.Context, currentUserID int64, recipientUsername string) (*conversation.Conversation, error) {
-	return fake(ctx, currentUserID, recipientUsername)
+type fakeConversationService struct {
+	createDirect func(context.Context, int64, string) (*conversation.Conversation, error)
+	getByID      func(context.Context, int64, int64) (*conversation.Conversation, error)
 }
 
-var _ handlers.ConversationService = fakeConversationService(nil)
+func (fake fakeConversationService) CreateDirect(ctx context.Context, currentUserID int64, recipientUsername string) (*conversation.Conversation, error) {
+	return fake.createDirect(ctx, currentUserID, recipientUsername)
+}
+
+func (fake fakeConversationService) GetByID(ctx context.Context, conversationID, currentUserID int64) (*conversation.Conversation, error) {
+	return fake.getByID(ctx, conversationID, currentUserID)
+}
+
+var _ handlers.ConversationService = fakeConversationService{}
 
 func TestConversationDirectRoute(t *testing.T) {
 	for _, tt := range []struct {
@@ -40,13 +47,13 @@ func TestConversationDirectRoute(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			calls := 0
-			conversations := fakeConversationService(func(ctx context.Context, userID int64, username string) (*conversation.Conversation, error) {
+			conversations := fakeConversationService{createDirect: func(ctx context.Context, userID int64, username string) (*conversation.Conversation, error) {
 				calls++
 				if userID != 42 || username != "anna" {
 					t.Fatal("route must pass the verified identity and recipient to service")
 				}
 				return &conversation.Conversation{ID: 7, Type: conversation.TypeDirect}, nil
-			})
+			}}
 			sessions := fakeSessionAuthenticator(func(_ context.Context, token string) (*session.Session, error) {
 				if token != "valid" {
 					return nil, session.ErrInvalid

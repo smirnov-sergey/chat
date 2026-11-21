@@ -13,11 +13,12 @@ import (
 )
 
 var (
-	errInternalServer     = errors.New("internal server error")
-	errCrossOriginRequest = errors.New("cross-origin request blocked")
-	errInvalidUserID      = errors.New("invalid user ID")
-	errAccessDenied       = errors.New("access denied")
-	errTooManyRequests    = errors.New("too many requests")
+	errInternalServer        = errors.New("internal server error")
+	errCrossOriginRequest    = errors.New("cross-origin request blocked")
+	errInvalidUserID         = errors.New("invalid user ID")
+	errInvalidConversationID = errors.New("invalid conversation ID")
+	errAccessDenied          = errors.New("access denied")
+	errTooManyRequests       = errors.New("too many requests")
 )
 
 func crossOriginDenied(w http.ResponseWriter, _ *http.Request) {
@@ -38,6 +39,8 @@ func handleError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusNotFound, user.ErrPhotoNotFound)
 	case errors.Is(err, errInvalidUserID):
 		writeError(w, http.StatusBadRequest, errInvalidUserID)
+	case errors.Is(err, errInvalidConversationID):
+		writeError(w, http.StatusBadRequest, errInvalidConversationID)
 	case errors.Is(err, errAccessDenied):
 		writeError(w, http.StatusForbidden, errAccessDenied)
 	case errors.Is(err, errCrossOriginRequest):

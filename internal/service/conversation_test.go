@@ -21,10 +21,17 @@ func (fake fakeConversationUsers) GetByUsername(ctx context.Context, username st
 	return fake(ctx, username)
 }
 
-type fakeConversationRepository func(context.Context, int64, int64) (*conversation.Conversation, error)
+type fakeConversationRepository struct {
+	getDirectByUsers func(context.Context, int64, int64) (*conversation.Conversation, error)
+	getByIDForUser   func(context.Context, int64, int64) (*conversation.Conversation, error)
+}
 
 func (fake fakeConversationRepository) GetDirectByUsers(ctx context.Context, firstUserID, secondUserID int64) (*conversation.Conversation, error) {
-	return fake(ctx, firstUserID, secondUserID)
+	return fake.getDirectByUsers(ctx, firstUserID, secondUserID)
+}
+
+func (fake fakeConversationRepository) GetByIDForUser(ctx context.Context, conversationID, currentUserID int64) (*conversation.Conversation, error) {
+	return fake.getByIDForUser(ctx, conversationID, currentUserID)
 }
 
 type fakeConversationDirectStore func(context.Context, int64, int64, time.Time) (*conversation.Conversation, error)
@@ -36,7 +43,7 @@ func (fake fakeConversationDirectStore) Create(ctx context.Context, firstUserID,
 var (
 	_ service.ConversationUsers       = fakeConversationUsers(nil)
 	_ service.ConversationUsers       = (*repository.UserRepository)(nil)
-	_ service.ConversationRepository  = fakeConversationRepository(nil)
+	_ service.ConversationRepository  = fakeConversationRepository{}
 	_ service.ConversationRepository  = (*repository.ConversationRepository)(nil)
 	_ service.ConversationDirectStore = fakeConversationDirectStore(nil)
 	_ service.ConversationDirectStore = (*repository.ConversationDirectStore)(nil)
@@ -79,13 +86,13 @@ func TestConversationServiceCreateDirect(t *testing.T) {
 				want.CreatedAt = createdAt
 				return want, nil
 			})
-			repo := fakeConversationRepository(func(gotCtx context.Context, firstID, secondID int64) (*conversation.Conversation, error) {
+			repo := fakeConversationRepository{getDirectByUsers: func(gotCtx context.Context, firstID, secondID int64) (*conversation.Conversation, error) {
 				if !tt.existing || gotCtx != ctx || firstID != 10 || secondID != 20 {
 					t.Fatal("lookup must only follow a pair conflict and use the same users and context")
 				}
 				calls = append(calls, "lookup")
 				return want, nil
-			})
+			}}
 			got, err := service.NewConversationService(users, repo, store).CreateDirect(ctx, 10, tt.username)
 			if err != nil || got != want {
 				t.Fatalf("CreateDirect = (%+v, %v), want the stored conversation", got, err)
@@ -175,10 +182,10 @@ func TestConversationServiceCreateDirectFailures(t *testing.T) {
 				}
 				return nil, tt.storeError
 			})
-			repo := fakeConversationRepository(func(context.Context, int64, int64) (*conversation.Conversation, error) {
+			repo := fakeConversationRepository{getDirectByUsers: func(context.Context, int64, int64) (*conversation.Conversation, error) {
 				calls = append(calls, "lookup")
 				return nil, tt.readError
-			})
+			}}
 			got, err := service.NewConversationService(users, repo, store).CreateDirect(ctx, 10, " ANNA ")
 			if got != nil || !errors.Is(err, tt.want) {
 				t.Fatalf("CreateDirect = (%+v, %v), want nil and %v", got, err, tt.want)

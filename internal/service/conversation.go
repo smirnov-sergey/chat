@@ -17,6 +17,7 @@ type ConversationUsers interface {
 }
 
 type ConversationRepository interface {
+	GetByIDForUser(ctx context.Context, conversationID, currentUserID int64) (*conversation.Conversation, error)
 	GetDirectByUsers(ctx context.Context, firstUserID, secondUserID int64) (*conversation.Conversation, error)
 }
 
@@ -40,6 +41,23 @@ func NewConversationService(
 		repository:  repository,
 		directStore: directStore,
 	}
+}
+
+func (s *ConversationService) GetByID(ctx context.Context, conversationID, currentUserID int64) (*conversation.Conversation, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	if conversationID <= 0 || currentUserID <= 0 {
+		return nil, conversation.ErrNotFound
+	}
+
+	c, err := s.repository.GetByIDForUser(ctx, conversationID, currentUserID)
+	if err != nil {
+		return nil, fmt.Errorf("get conversation for user: %w", err)
+	}
+
+	return c, nil
 }
 
 func (s *ConversationService) CreateDirect(ctx context.Context, currentUserID int64, recipientUsername string) (*conversation.Conversation, error) {

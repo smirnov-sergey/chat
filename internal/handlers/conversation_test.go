@@ -19,10 +19,17 @@ import (
 	"chat/internal/validation"
 )
 
-type fakeConversationService func(context.Context, int64, string) (*conversation.Conversation, error)
+type fakeConversationService struct {
+	createDirect func(context.Context, int64, string) (*conversation.Conversation, error)
+	getByID      func(context.Context, int64, int64) (*conversation.Conversation, error)
+}
 
 func (fake fakeConversationService) CreateDirect(ctx context.Context, currentUserID int64, recipientUsername string) (*conversation.Conversation, error) {
-	return fake(ctx, currentUserID, recipientUsername)
+	return fake.createDirect(ctx, currentUserID, recipientUsername)
+}
+
+func (fake fakeConversationService) GetByID(ctx context.Context, conversationID, currentUserID int64) (*conversation.Conversation, error) {
+	return fake.getByID(ctx, conversationID, currentUserID)
 }
 
 type conversationSessionAuthenticator struct{}
@@ -35,7 +42,7 @@ func (conversationSessionAuthenticator) Authenticate(_ context.Context, token st
 }
 
 var (
-	_ handlers.ConversationService = fakeConversationService(nil)
+	_ handlers.ConversationService = fakeConversationService{}
 	_ handlers.ConversationService = (*service.ConversationService)(nil)
 )
 
@@ -72,13 +79,13 @@ func TestConversationHandlerCreateDirect(t *testing.T) {
 	ctx := context.WithValue(t.Context(), traceKey{}, "conversation-trace")
 	calls := 0
 	createdAt := time.Date(2026, 11, 20, 15, 0, 0, 0, time.FixedZone("UTC+3", 3*60*60))
-	s := fakeConversationService(func(gotCtx context.Context, userID int64, username string) (*conversation.Conversation, error) {
+	s := fakeConversationService{createDirect: func(gotCtx context.Context, userID int64, username string) (*conversation.Conversation, error) {
 		calls++
 		if gotCtx.Value(traceKey{}) != "conversation-trace" || userID != 42 || username != " ANNA " {
 			t.Fatal("service must receive verified identity, request context and unchanged username")
 		}
 		return &conversation.Conversation{ID: 7, Type: conversation.TypeDirect, CreatedAt: createdAt}, nil
-	})
+	}}
 	handler := conversationDirectHandler(s)
 	// Both a new and an existing dialogue use the same successful response.
 	for range 2 {
@@ -122,10 +129,10 @@ func TestConversationHandlerCreateDirectInvalidRequests(t *testing.T) {
 		{"trailing garbage", "application/json", conversationDirectBody + `x`, 400},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			s := fakeConversationService(func(context.Context, int64, string) (*conversation.Conversation, error) {
+			s := fakeConversationService{createDirect: func(context.Context, int64, string) (*conversation.Conversation, error) {
 				t.Fatal("invalid request must not reach service")
 				return nil, nil
-			})
+			}}
 			req := conversationDirectRequest(tt.body)
 			req.Header.Set("Content-Type", tt.contentType)
 			rec := httptest.NewRecorder()
@@ -165,10 +172,10 @@ func TestConversationHandlerCreateDirectBodyBoundary(t *testing.T) {
 					body = padding + conversationDirectBody
 				}
 				calls := 0
-				s := fakeConversationService(func(context.Context, int64, string) (*conversation.Conversation, error) {
+				s := fakeConversationService{createDirect: func(context.Context, int64, string) (*conversation.Conversation, error) {
 					calls++
 					return &conversation.Conversation{ID: 7, Type: conversation.TypeDirect}, nil
-				})
+				}}
 				rec := httptest.NewRecorder()
 				conversationDirectHandler(s).ServeHTTP(rec, conversationDirectRequest(body))
 				if size == 4096 {
@@ -199,9 +206,9 @@ func TestConversationHandlerCreateDirectServiceErrors(t *testing.T) {
 		{errors.New("private database details"), 500, "internal server error"},
 	} {
 		t.Run(tt.message, func(t *testing.T) {
-			s := fakeConversationService(func(context.Context, int64, string) (*conversation.Conversation, error) {
+			s := fakeConversationService{createDirect: func(context.Context, int64, string) (*conversation.Conversation, error) {
 				return nil, fmt.Errorf("create conversation: %w", tt.err)
-			})
+			}}
 			rec := httptest.NewRecorder()
 			conversationDirectHandler(s).ServeHTTP(rec, conversationDirectRequest(conversationDirectBody))
 			assertConversationError(t, rec, tt.status, tt.message)
