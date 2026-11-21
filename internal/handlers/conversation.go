@@ -13,6 +13,7 @@ import (
 const maxConversationDirectBodyBytes = 4 << 10
 
 type ConversationService interface {
+	ListByUser(ctx context.Context, currentUserID int64) ([]conversation.Conversation, error)
 	GetByID(ctx context.Context, conversationID, currentUserID int64) (*conversation.Conversation, error)
 	CreateDirect(ctx context.Context, currentUserID int64, recipientUsername string) (*conversation.Conversation, error)
 }
@@ -23,6 +24,29 @@ type ConversationHandler struct {
 
 func NewConversationHandler(conversationService ConversationService) *ConversationHandler {
 	return &ConversationHandler{conversationService: conversationService}
+}
+
+func (h *ConversationHandler) ListByUser(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+
+	currentUserID, ok := userIDFromContext(r.Context())
+	if !ok {
+		handleError(w, session.ErrInvalid)
+		return
+	}
+
+	conversations, err := h.conversationService.ListByUser(r.Context(), currentUserID)
+	if err != nil {
+		handleError(w, err)
+		return
+	}
+
+	response := make([]dto.ConversationResponse, len(conversations))
+	for i := range conversations {
+		response[i] = dto.ToConversationResponse(&conversations[i])
+	}
+
+	writeJSON(w, http.StatusOK, response)
 }
 
 func (h *ConversationHandler) GetByID(w http.ResponseWriter, r *http.Request) {
