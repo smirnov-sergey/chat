@@ -93,7 +93,7 @@ func testAppConversationDirect(t *testing.T, ctx context.Context, db *sql.DB, cl
 	assertConversationCounts(t, ctx, db, 1, 1, 2)
 	testAppConversationRead(t, ctx, client, baseURL, first, firstCookie, secondCookie)
 	assertConversationDirect(t, ctx, db, stored, ivan.ID, anna.ID)
-	assertConversationCounts(t, ctx, db, 1, 1, 2)
+	assertConversationCounts(t, ctx, db, 2, 2, 4)
 }
 
 func testAppConversationRead(t *testing.T, ctx context.Context, client *http.Client, baseURL string, want dto.ConversationResponse, firstCookie, secondCookie *http.Cookie) {
@@ -149,6 +149,7 @@ func testAppConversationRead(t *testing.T, ctx context.Context, client *http.Cli
 	if err := json.Unmarshal(outsider, &body); err != nil || len(body) != 1 || body["error"] != conversation.ErrNotFound.Error() {
 		t.Fatalf("unexpected inaccessible conversation response: %s", outsider)
 	}
+	testAppConversationList(t, ctx, client, baseURL, want, firstCookie, secondCookie, cookies[0])
 
 	logout, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/auth/logout", nil)
 	if err != nil {
@@ -157,4 +158,10 @@ func testAppConversationRead(t *testing.T, ctx context.Context, client *http.Cli
 	logout.AddCookie(cookies[0])
 	doAppRequest(t, client, logout, http.StatusNoContent)
 	read(id, cookies[0], http.StatusUnauthorized)
+	list, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+"/conversations", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	list.AddCookie(cookies[0])
+	doAppRequest(t, client, list, http.StatusUnauthorized)
 }

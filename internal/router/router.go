@@ -18,5 +18,6 @@ func New(userHandler *handlers.UserHandler, conversationHandler *handlers.Conver
 	mux.HandleFunc("DELETE /users/{id}/photo", userHandler.DeletePhoto)
 	mux.HandleFunc("POST /conversations/direct", conversationHandler.CreateDirect)
 	mux.HandleFunc("GET /conversations/{id}", conversationHandler.GetByID)
+	mux.HandleFunc("GET /conversations", conversationHandler.ListByUser)
 	return mux
 }
