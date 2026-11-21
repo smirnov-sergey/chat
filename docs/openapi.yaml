@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: Chat API
-  description: HTTP API проекта Chat. Доступны проверка работоспособности, регистрация, вход, выход, чтение собственного профиля, загрузка, получение и удаление фото.
+  description: HTTP API проекта Chat. Доступны проверка работоспособности, регистрация, вход, выход, профиль и его фото, создание и чтение прямых диалогов, список собственных переписок.
   version: 0.1.0
 
 servers:
@@ -678,8 +678,201 @@ paths:
               example:
                 error: internal server error
 
+  /conversations/direct:
+    post:
+      summary: Создание или получение прямого диалога
+      operationId: createDirectConversation
+      description: |
+        Текущий пользователь определяется по cookie chat_session, собеседник —
+        по recipient_username. ID инициатора клиент не передаёт.
+        Диалог с собой запрещён. Подтверждение собеседника не требуется.
+        Новая переписка сразу видна обоим участникам, даже без сообщений.
+        Повторный или встречный запрос возвращает тот же диалог с прежней датой.
+        И создание, и получение существующего диалога дают 200, а не 201 или 409.
+        Сессия проверяется до разбора тела. Межсайтовые запросы браузера запрещены;
+        UI и API должны иметь один origin. CLI без Origin и Sec-Fetch-Site допустим.
+        Сессия не продлевается, Set-Cookie не выдаётся.
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        description: Один JSON-объект не более 4096 байт; неизвестные поля запрещены.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConversationDirectRequest'
+      responses:
+        '200':
+          description: Созданный или существующий прямой диалог.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConversationResponse'
+        '400':
+          description: Некорректный JSON, username, неизвестные поля или диалог с собой.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidBody:
+                  value:
+                    error: invalid request body
+                invalidUsername:
+                  value:
+                    error: username must contain 3 to 32 lowercase ASCII letters, digits or underscores
+                selfDialogue:
+                  value:
+                    error: direct conversation requires two distinct positive user IDs
+        '401':
+          $ref: '#/components/responses/ConversationUnauthorized'
+        '403':
+          description: Запрос с чужого сайта отклонён до создания диалога.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: cross-origin request blocked
+        '404':
+          description: Собеседник не найден либо существующая переписка не найдена после конфликта пары.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                userNotFound:
+                  value:
+                    error: user not found
+                conversationNotFound:
+                  value:
+                    error: conversation not found
+        '413':
+          description: Тело запроса превышает 4096 байт.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: request body too large
+        '415':
+          description: Отсутствует или некорректен Content-Type application/json.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: Content-Type must be application/json
+        '500':
+          $ref: '#/components/responses/ConversationInternalError'
+
+  /conversations/{id}:
+    get:
+      summary: Получение переписки участником
+      operationId: getConversationByID
+      description: |
+        Возвращает переписку только её участнику, определённому по сессии.
+        Посторонний и запрос отсутствующей переписки получают одинаковый 404.
+        Сессия проверяется до разбора ID. Чтение не меняет дату переписки,
+        не продлевает сессию и не выдаёт Set-Cookie.
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+            maximum: 9223372036854775807
+      responses:
+        '200':
+          description: Переписка текущего пользователя.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConversationResponse'
+        '400':
+          description: ID не является положительным целым числом в диапазоне int64.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: invalid conversation ID
+        '401':
+          $ref: '#/components/responses/ConversationUnauthorized'
+        '404':
+          description: Переписка отсутствует либо пользователь не является её участником.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: conversation not found
+        '500':
+          $ref: '#/components/responses/ConversationInternalError'
+
+  /conversations:
+    get:
+      summary: Список собственных переписок
+      operationId: listUserConversations
+      description: |
+        Возвращает все переписки текущего пользователя, определённого по сессии.
+        Пагинации нет. Порядок — created_at DESC, затем id DESC.
+        Пустой список возвращается как [], а не null. Чужие переписки не включаются.
+        Параметры query и заголовки не позволяют выбрать другого пользователя.
+        Чтение не продлевает сессию и не выдаёт Set-Cookie.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Полный список переписок, включая пустой.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ConversationResponse'
+        '401':
+          $ref: '#/components/responses/ConversationUnauthorized'
+        '500':
+          $ref: '#/components/responses/ConversationInternalError'
+
 components:
   responses:
+    ConversationUnauthorized:
+      description: Cookie отсутствует, токен некорректен либо сессия истекла или отозвана.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: invalid or expired session
+    ConversationInternalError:
+      description: Внутренняя ошибка. Технические подробности клиенту не возвращаются.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: internal server error
     AuthRateLimitExceeded:
       description: |
         Достигнут лимит запросов для IP либо заполнена таблица отслеживаемых IP.
@@ -714,6 +907,41 @@ components:
         Сессионная cookie устанавливается сервером при регистрации или входе.
         Сессия действует 7 дней без продления по активности.
   schemas:
+    ConversationDirectRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - recipient_username
+      properties:
+        recipient_username:
+          type: string
+          minLength: 3
+          description: |
+            Точный username собеседника. Внешние пробелы удаляются, буквы
+            приводятся к нижнему регистру. После нормализации допустимы
+            3–32 символа a–z, 0–9 и _. Отображаемое имя name не используется.
+          example: ' Anna '
+    ConversationResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - type
+        - created_at
+      properties:
+        id:
+          type: integer
+          format: int64
+          minimum: 1
+          example: 7
+        type:
+          type: string
+          enum: [direct]
+        created_at:
+          type: string
+          format: date-time
+          description: Дата создания переписки в UTC; при повторном создании не меняется.
+          example: '2026-11-21T12:00:00Z'
     UserRegistrationRequest:
       type: object
       additionalProperties: false
