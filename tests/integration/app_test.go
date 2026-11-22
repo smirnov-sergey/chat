@@ -159,6 +159,9 @@ func TestAppRunAuthentication(t *testing.T) {
 	t.Run("direct conversation", func(t *testing.T) {
 		testAppConversationDirect(t, ctx, db, client, baseURL, cookies[0], otherCookies[0])
 	})
+	t.Run("personal conversation", func(t *testing.T) {
+		testAppConversationPersonal(t, ctx, db, client, baseURL, cookies[0], otherCookies[0])
+	})
 	t.Run("profile photo lifecycle", func(t *testing.T) {
 		readPhoto := func(cookie *http.Cookie, wantStatus int) []byte {
 			t.Helper()
@@ -318,6 +321,7 @@ func TestAppRunAuthentication(t *testing.T) {
 		}
 	})
 	request(http.MethodPost, "/auth/logout", "", cookies[0], false, http.StatusNoContent)
+	request(http.MethodPost, "/conversations/personal", "", cookies[0], false, http.StatusUnauthorized)
 	request(http.MethodPost, "/conversations/direct", `{"recipient_username":"anna"}`, cookies[0], false, http.StatusUnauthorized)
 	request(http.MethodGet, profilePath, "", cookies[0], false, http.StatusUnauthorized)
 
