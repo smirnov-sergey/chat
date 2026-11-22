@@ -219,17 +219,17 @@ HTTP-контракт — в `openapi.yaml`.
 | `conversations` | `id` — PK; `type` — тип переписки; `created_at` — дата создания |
 | `conversations_members` | `conversation_id` — FK на переписку; `user_id` — FK на пользователя; составной PK `(conversation_id, user_id)` |
 | `conversations_direct` | `conversation_id` — PK и FK на переписку; `low_user_id`, `high_user_id` — FK на пользователей; CHECK `low_user_id < high_user_id`; UNIQUE `(low_user_id, high_user_id)` |
+| `conversations_personal` | `conversation_id` — PK и FK на переписку; `user_id` — NOT NULL, UNIQUE и FK на владельца |
 
 Для поиска переписок пользователя нужен дополнительный индекс
 `conversations_members (user_id, conversation_id)`. Первичный ключ этой
 таблицы начинается с `conversation_id` и обслуживает поиск её участников.
 
 Названия связанных таблиц используют общий префикс `conversations_`.
-В первой миграции допускается только реализуемый тип `direct`; допустимые
-типы расширяются миграциями вместе с соответствующими сценариями.
-Будущая `conversations_personal` обеспечит уникальность владельца «Избранного».
+После миграции `00006_create_conversations_personal.sql` допускаются типы
+`direct` и `personal`. Допустимые типы расширяются миграциями вместе со сценариями.
 `conversations_group` появится, если понадобятся отдельные данные группы.
-Эти таблицы заранее не создаются.
+Эта таблица заранее не создаётся.
 
 Общие операции чтения и проверки участия используют `conversations` и
 `conversations_members`; создание каждого типа имеет свои правила.
@@ -247,6 +247,17 @@ HTTP-контракт — в `openapi.yaml`.
 откатывается. `ConversationService.CreateDirect` нормализует username,
 находит собеседника, запрещает диалог с собой и вызывает store. При конфликте
 service получает существующую переписку отдельным `GetDirectByUsers`.
+
+`ConversationPersonalStore.Create` одной транзакцией создаёт общую строку,
+владельца и единственного участника. UNIQUE владельца предотвращает дубликаты.
+При конфликте транзакция откатывается, а `ConversationService.CreatePersonal`
+получает существующую запись через `GetPersonalByUser`. Соответствие типа,
+владельца и участника обеспечивает store; одних ограничений БД для этого недостаточно.
+
+`POST /conversations/personal` определяет владельца только по сессии.
+Тело запроса не требуется и игнорируется; создание и повторное обращение
+возвращают `200`. Регистрация и GET-запросы личную переписку не создают.
+Для её чтения и включения в список используются общие методы ниже.
 
 `GetByIDForUser` и `ListByUser` ограничивают выборку через `conversations_members`
 в самом SQL-запросе. Отсутствующая и недоступная переписки дают `ErrNotFound`.
