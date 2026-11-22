@@ -14,9 +14,14 @@ import (
 )
 
 type fakeConversationService struct {
-	listByUser   func(context.Context, int64) ([]conversation.Conversation, error)
-	createDirect func(context.Context, int64, string) (*conversation.Conversation, error)
-	getByID      func(context.Context, int64, int64) (*conversation.Conversation, error)
+	createPersonal func(context.Context, int64) (*conversation.Conversation, error)
+	listByUser     func(context.Context, int64) ([]conversation.Conversation, error)
+	createDirect   func(context.Context, int64, string) (*conversation.Conversation, error)
+	getByID        func(context.Context, int64, int64) (*conversation.Conversation, error)
+}
+
+func (fake fakeConversationService) CreatePersonal(ctx context.Context, currentUserID int64) (*conversation.Conversation, error) {
+	return fake.createPersonal(ctx, currentUserID)
 }
 
 func (fake fakeConversationService) ListByUser(ctx context.Context, currentUserID int64) ([]conversation.Conversation, error) {
