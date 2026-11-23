@@ -41,7 +41,7 @@ func TestConversationListRoute(t *testing.T) {
 				}
 				return &session.Session{UserID: 42}, nil
 			})
-			appRouter := router.New(handlers.NewUserHandler(fakeUserService{}, true, 1024), handlers.NewConversationHandler(conversations))
+			appRouter := router.New(handlers.NewUserHandler(fakeUserService{}, true, 1024), handlers.NewConversationHandler(conversations), handlers.NewConversationMessageHandler(nil))
 			handler := handlers.SessionMiddleware(sessions)(appRouter)
 			req := httptest.NewRequest(tt.method, "/conversations?user_id=999", nil)
 			req.Header.Set("X-User-ID", "999")

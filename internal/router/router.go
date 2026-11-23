@@ -6,7 +6,7 @@ import (
 	"chat/internal/handlers"
 )
 
-func New(userHandler *handlers.UserHandler, conversationHandler *handlers.ConversationHandler) http.Handler {
+func New(userHandler *handlers.UserHandler, conversationHandler *handlers.ConversationHandler, conversationMessageHandler *handlers.ConversationMessageHandler) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", handlers.Health)
 	mux.HandleFunc("POST /auth/register", userHandler.Register)
@@ -20,5 +20,6 @@ func New(userHandler *handlers.UserHandler, conversationHandler *handlers.Conver
 	mux.HandleFunc("POST /conversations/personal", conversationHandler.CreatePersonal)
 	mux.HandleFunc("GET /conversations/{id}", conversationHandler.GetByID)
 	mux.HandleFunc("GET /conversations", conversationHandler.ListByUser)
+	mux.HandleFunc("POST /conversations/{id}/messages", conversationMessageHandler.Create)
 	return mux
 }

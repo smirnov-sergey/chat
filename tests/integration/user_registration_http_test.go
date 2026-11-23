@@ -48,7 +48,7 @@ func TestUserRegistrationHTTP(t *testing.T) {
 		t.Fatal(err)
 	}
 	userHandler := handlers.NewUserHandler(users, false, 5*1024*1024)
-	appRouter := router.New(userHandler, handlers.NewConversationHandler(nil))
+	appRouter := router.New(userHandler, handlers.NewConversationHandler(nil), handlers.NewConversationMessageHandler(nil))
 	crossOriginProtectionMiddleware := handlers.CrossOriginProtectionMiddleware()
 	authRateLimitMiddleware := handlers.AuthRateLimitMiddleware()
 	sessionMiddleware := handlers.SessionMiddleware(sessions)

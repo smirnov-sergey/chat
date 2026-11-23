@@ -75,7 +75,11 @@ func Run(ctx context.Context, cfg config.Config) error {
 	conversationService := service.NewConversationService(userRepository, conversationRepository, conversationDirectStore, conversationPersonalStore)
 	conversationHandler := handlers.NewConversationHandler(conversationService)
 
-	appRouter := router.New(userHandler, conversationHandler)
+	conversationMessageRepository := repository.NewConversationMessageRepository(db)
+	conversationMessageService := service.NewConversationMessageService(conversationRepository, conversationMessageRepository)
+	conversationMessageHandler := handlers.NewConversationMessageHandler(conversationMessageService)
+
+	appRouter := router.New(userHandler, conversationHandler, conversationMessageHandler)
 
 	crossOriginProtectionMiddleware := handlers.CrossOriginProtectionMiddleware()
 	authRateLimitMiddleware := handlers.AuthRateLimitMiddleware()

@@ -64,7 +64,7 @@ func newRouter(t *testing.T) http.Handler {
 		t.Fatal("login must not be called for this request")
 		return nil, nil
 	}}
-	return router.New(handlers.NewUserHandler(users, true, 5*1024*1024), handlers.NewConversationHandler(nil))
+	return router.New(handlers.NewUserHandler(users, true, 5*1024*1024), handlers.NewConversationHandler(nil), handlers.NewConversationMessageHandler(nil))
 }
 
 func TestHealth(t *testing.T) {
@@ -126,7 +126,7 @@ func TestRegistrationRoute(t *testing.T) {
 					Token: &session.Token{Value: "test-token", ExpiresAt: time.Now().Add(time.Hour)},
 				}, nil
 			}}
-			h := router.New(handlers.NewUserHandler(registration, true, 5*1024*1024), handlers.NewConversationHandler(nil))
+			h := router.New(handlers.NewUserHandler(registration, true, 5*1024*1024), handlers.NewConversationHandler(nil), handlers.NewConversationMessageHandler(nil))
 			req := httptest.NewRequest(http.MethodPost, "http://chat.local/auth/register",
 				strings.NewReader(`{"username":"ivan","name":"Иван","password":"long password phrase"}`))
 			req.Header.Set("Content-Type", "application/json")
@@ -156,7 +156,7 @@ func TestLoginRoute(t *testing.T) {
 					Token: &session.Token{Value: "test-token", ExpiresAt: time.Now().Add(time.Hour)},
 				}, nil
 			}}
-			h := router.New(handlers.NewUserHandler(users, true, 5*1024*1024), handlers.NewConversationHandler(nil))
+			h := router.New(handlers.NewUserHandler(users, true, 5*1024*1024), handlers.NewConversationHandler(nil), handlers.NewConversationMessageHandler(nil))
 			req := httptest.NewRequest(http.MethodPost, "http://chat.local/auth/login",
 				strings.NewReader(`{"username":"ivan","password":"long password phrase"}`))
 			req.Header.Set("Content-Type", "application/json")
@@ -173,7 +173,7 @@ func TestLoginRoute(t *testing.T) {
 }
 
 func TestUserProfileRouteRequiresVerifiedIdentity(t *testing.T) {
-	h := router.New(handlers.NewUserHandler(fakeUserService{}, true, 5*1024*1024), handlers.NewConversationHandler(nil))
+	h := router.New(handlers.NewUserHandler(fakeUserService{}, true, 5*1024*1024), handlers.NewConversationHandler(nil), handlers.NewConversationMessageHandler(nil))
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/users/42", nil))
 	if rec.Code != http.StatusUnauthorized {
