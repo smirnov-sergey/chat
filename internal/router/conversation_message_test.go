@@ -13,10 +13,13 @@ import (
 	"chat/internal/router"
 )
 
-type fakeConversationMessageService func(context.Context, int64, int64, string) (*conversation.Message, error)
+type fakeConversationMessageService struct {
+	create func(context.Context, int64, int64, string) (*conversation.Message, error)
+	list   func(context.Context, int64, int64, *int64) (*conversation.MessagePage, error)
+}
 
 func (fake fakeConversationMessageService) Create(ctx context.Context, conversationID, userID int64, text string) (*conversation.Message, error) {
-	return fake(ctx, conversationID, userID, text)
+	return fake.create(ctx, conversationID, userID, text)
 }
 
 func TestConversationMessageRoute(t *testing.T) {
@@ -35,13 +38,13 @@ func TestConversationMessageRoute(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			calls := 0
-			messages := fakeConversationMessageService(func(_ context.Context, conversationID, userID int64, text string) (*conversation.Message, error) {
+			messages := fakeConversationMessageService{create: func(_ context.Context, conversationID, userID int64, text string) (*conversation.Message, error) {
 				calls++
 				if conversationID != 7 || userID != 42 || text != "hello" {
 					t.Fatal("route must use path ID, session user and body text")
 				}
 				return &conversation.Message{ID: 9, ConversationID: conversationID, SenderUserID: userID, Text: text}, nil
-			})
+			}}
 			sessions := fakeSessionAuthenticator(func(_ context.Context, token string) (*session.Session, error) {
 				if token != "valid" {
 					return nil, session.ErrInvalid
@@ -67,4 +70,8 @@ func TestConversationMessageRoute(t *testing.T) {
 			}
 		})
 	}
+}
+
+func (fake fakeConversationMessageService) List(ctx context.Context, conversationID, userID int64, beforeID *int64) (*conversation.MessagePage, error) {
+	return fake.list(ctx, conversationID, userID, beforeID)
 }

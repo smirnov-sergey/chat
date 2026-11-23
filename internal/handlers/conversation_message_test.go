@@ -18,10 +18,13 @@ import (
 	"chat/internal/validation"
 )
 
-type fakeConversationMessageService func(context.Context, int64, int64, string) (*conversation.Message, error)
+type fakeConversationMessageService struct {
+	create func(context.Context, int64, int64, string) (*conversation.Message, error)
+	list   func(context.Context, int64, int64, *int64) (*conversation.MessagePage, error)
+}
 
 func (fake fakeConversationMessageService) Create(ctx context.Context, conversationID, userID int64, text string) (*conversation.Message, error) {
-	return fake(ctx, conversationID, userID, text)
+	return fake.create(ctx, conversationID, userID, text)
 }
 
 var _ handlers.ConversationMessageService = (*service.ConversationMessageService)(nil)
@@ -48,14 +51,14 @@ func TestConversationMessageHandlerCreate(t *testing.T) {
 		t.Fatal(err)
 	}
 	calls := 0
-	s := fakeConversationMessageService(func(gotCtx context.Context, conversationID, userID int64, gotText string) (*conversation.Message, error) {
+	s := fakeConversationMessageService{create: func(gotCtx context.Context, conversationID, userID int64, gotText string) (*conversation.Message, error) {
 		calls++
 		if gotCtx.Value(traceKey{}) != "trace" || conversationID != 7 || userID != 42 || gotText != text {
 			t.Fatal("service must receive request context, path ID, session user and unchanged text")
 		}
 		return &conversation.Message{ID: 9, ConversationID: 7, SenderUserID: 42, Text: text,
 			CreatedAt: time.Date(2026, 11, 23, 15, 0, 0, 0, time.FixedZone("UTC+3", 3*60*60))}, nil
-	})
+	}}
 	req := conversationMessageRequest(string(body)).WithContext(ctx)
 	req.Header.Set("Content-Type", "application/json; charset=utf-8")
 	rec := httptest.NewRecorder()
@@ -130,9 +133,9 @@ func TestConversationMessageHandlerServiceErrors(t *testing.T) {
 		{validation.ErrInvalidConversationMessageText, 400, validation.ErrInvalidConversationMessageText.Error()},
 		{errors.New("database password must not leak"), 500, "internal server error"},
 	} {
-		s := fakeConversationMessageService(func(context.Context, int64, int64, string) (*conversation.Message, error) {
+		s := fakeConversationMessageService{create: func(context.Context, int64, int64, string) (*conversation.Message, error) {
 			return nil, fmt.Errorf("wrapped: %w", tt.err)
-		})
+		}}
 		rec := httptest.NewRecorder()
 		conversationMessageHandler(s).ServeHTTP(rec, conversationMessageRequest(`{"text":"hi"}`))
 		assertConversationError(t, rec, tt.status, tt.message)
@@ -145,10 +148,10 @@ func TestConversationMessageHandlerBodyLimit(t *testing.T) {
 		body := `{"text":"hi"}`
 		body += strings.Repeat(" ", size-len(body))
 		called := false
-		s := fakeConversationMessageService(func(context.Context, int64, int64, string) (*conversation.Message, error) {
+		s := fakeConversationMessageService{create: func(context.Context, int64, int64, string) (*conversation.Message, error) {
 			called = true
 			return &conversation.Message{ID: 9}, nil
-		})
+		}}
 		req := conversationMessageRequest(body)
 		req.ContentLength = -1
 		rec := httptest.NewRecorder()
@@ -168,16 +171,20 @@ func TestConversationMessageHandlerBodyLimit(t *testing.T) {
 
 func TestConversationMessageHandlerEscapedUnicode(t *testing.T) {
 	want := strings.Repeat("👋", 4000)
-	s := fakeConversationMessageService(func(_ context.Context, _, _ int64, text string) (*conversation.Message, error) {
+	s := fakeConversationMessageService{create: func(_ context.Context, _, _ int64, text string) (*conversation.Message, error) {
 		if text != want {
 			t.Fatal("escaped Unicode must decode unchanged")
 		}
 		return &conversation.Message{Text: text}, nil
-	})
+	}}
 	rec := httptest.NewRecorder()
 	body := `{"text":"` + strings.Repeat(`\ud83d\udc4b`, 4000) + `"}`
 	conversationMessageHandler(s).ServeHTTP(rec, conversationMessageRequest(body))
 	if rec.Code != 201 {
 		t.Fatalf("escaped text rejected: %d %s", rec.Code, rec.Body.String())
 	}
+}
+
+func (fake fakeConversationMessageService) List(ctx context.Context, conversationID, userID int64, beforeID *int64) (*conversation.MessagePage, error) {
+	return fake.list(ctx, conversationID, userID, beforeID)
 }

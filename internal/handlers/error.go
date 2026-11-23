@@ -33,6 +33,8 @@ func handleError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusNotFound, user.ErrNotFound)
 	case errors.Is(err, conversation.ErrNotFound):
 		writeError(w, http.StatusNotFound, conversation.ErrNotFound)
+	case errors.Is(err, conversation.ErrInvalidCursor):
+		writeError(w, http.StatusBadRequest, conversation.ErrInvalidCursor)
 	case errors.Is(err, conversation.ErrInvalidParticipants):
 		writeError(w, http.StatusBadRequest, conversation.ErrInvalidParticipants)
 	case errors.Is(err, user.ErrPhotoNotFound):

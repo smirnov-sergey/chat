@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"net/http"
+	"net/url"
 	"strconv"
 
 	"chat/internal/dto"
@@ -14,6 +15,7 @@ const maxConversationMessageBodyBytes = 64 << 10
 
 type ConversationMessageService interface {
 	Create(ctx context.Context, conversationID, currentUserID int64, text string) (*conversation.Message, error)
+	List(ctx context.Context, conversationID, currentUserID int64, beforeID *int64) (*conversation.MessagePage, error)
 }
 
 type ConversationMessageHandler struct {
@@ -57,4 +59,51 @@ func (h *ConversationMessageHandler) Create(w http.ResponseWriter, r *http.Reque
 	}
 
 	writeJSON(w, http.StatusCreated, dto.ToConversationMessageResponse(message))
+}
+
+func (h *ConversationMessageHandler) List(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+
+	currentUserID, ok := userIDFromContext(r.Context())
+	if !ok {
+		handleError(w, session.ErrInvalid)
+		return
+	}
+
+	conversationID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil || conversationID <= 0 {
+		handleError(w, errInvalidConversationID)
+		return
+	}
+
+	query, err := url.ParseQuery(r.URL.RawQuery)
+	if err != nil {
+		handleError(w, conversation.ErrInvalidCursor)
+		return
+	}
+
+	var beforeID *int64
+
+	if values, exists := query["before_id"]; exists {
+		if len(values) != 1 {
+			handleError(w, conversation.ErrInvalidCursor)
+			return
+		}
+
+		value, err := strconv.ParseInt(values[0], 10, 64)
+		if err != nil || value <= 0 {
+			handleError(w, conversation.ErrInvalidCursor)
+			return
+		}
+
+		beforeID = &value
+	}
+
+	page, err := h.conversationMessageService.List(r.Context(), conversationID, currentUserID, beforeID)
+	if err != nil {
+		handleError(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, dto.ToConversationMessagePageResponse(page))
 }

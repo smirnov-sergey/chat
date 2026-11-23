@@ -10,6 +10,19 @@ type ConversationMessageRequest struct {
 	Text string `json:"text"`
 }
 
+type ConversationMessagePageResponse struct {
+	Messages   []ConversationMessageResponse `json:"messages"`
+	NextCursor *int64                        `json:"next_cursor"`
+}
+
+func ToConversationMessagePageResponse(page *conversation.MessagePage) ConversationMessagePageResponse {
+	messages := make([]ConversationMessageResponse, len(page.Messages))
+	for i := range page.Messages {
+		messages[i] = ToConversationMessageResponse(&page.Messages[i])
+	}
+	return ConversationMessagePageResponse{Messages: messages, NextCursor: page.NextCursor}
+}
+
 type ConversationMessageResponse struct {
 	ID             int64     `json:"id"`
 	ConversationID int64     `json:"conversation_id"`
