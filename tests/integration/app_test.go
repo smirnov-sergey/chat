@@ -326,6 +326,7 @@ func TestAppRunAuthentication(t *testing.T) {
 	request(http.MethodPost, "/auth/logout", "", cookies[0], false, http.StatusNoContent)
 	request(http.MethodPost, "/conversations/personal", "", cookies[0], false, http.StatusUnauthorized)
 	request(http.MethodPost, "/conversations/1/messages", `{"text":"after logout"}`, cookies[0], false, http.StatusUnauthorized)
+	request(http.MethodGet, "/conversations/1/messages", "", cookies[0], false, http.StatusUnauthorized)
 	request(http.MethodPost, "/conversations/direct", `{"recipient_username":"anna"}`, cookies[0], false, http.StatusUnauthorized)
 	request(http.MethodGet, profilePath, "", cookies[0], false, http.StatusUnauthorized)
 

@@ -108,4 +108,7 @@ func testAppConversationMessages(t *testing.T, ctx context.Context, db *sql.DB, 
 	if finalCount != initialCount+3 {
 		t.Fatalf("message count = %d, want %d; rejected requests must not insert messages", finalCount, initialCount+3)
 	}
+	t.Run("history", func(t *testing.T) {
+		testAppConversationMessageHistory(t, ctx, db, client, baseURL, direct.ID, personal.ID, firstCookie, secondCookie)
+	})
 }

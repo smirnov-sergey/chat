@@ -33,7 +33,7 @@ func TestConversationMessageRoute(t *testing.T) {
 		{"invalid session", "POST", "/conversations/7/messages", "invalid", false, 401, 0},
 		{"cross origin", "POST", "/conversations/7/messages", "valid", true, 403, 0},
 		{"invalid ID", "POST", "/conversations/abc/messages", "valid", false, 400, 0},
-		{"wrong method", "GET", "/conversations/7/messages", "valid", false, 405, 0},
+		{"wrong method", "DELETE", "/conversations/7/messages", "valid", false, 405, 0},
 		{"wrong path", "POST", "/conversations/7/messages/extra", "valid", false, 404, 0},
 	} {
 		t.Run(tt.name, func(t *testing.T) {

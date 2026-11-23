@@ -21,5 +21,6 @@ func New(userHandler *handlers.UserHandler, conversationHandler *handlers.Conver
 	mux.HandleFunc("GET /conversations/{id}", conversationHandler.GetByID)
 	mux.HandleFunc("GET /conversations", conversationHandler.ListByUser)
 	mux.HandleFunc("POST /conversations/{id}/messages", conversationMessageHandler.Create)
+	mux.HandleFunc("GET /conversations/{id}/messages", conversationMessageHandler.List)
 	return mux
 }
