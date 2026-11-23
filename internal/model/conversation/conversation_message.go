@@ -9,3 +9,8 @@ type Message struct {
 	Text           string
 	CreatedAt      time.Time
 }
+
+type MessagePage struct {
+	Messages   []Message
+	NextCursor *int64
+}
