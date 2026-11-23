@@ -831,6 +831,94 @@ paths:
           $ref: '#/components/responses/ConversationInternalError'
 
   /conversations/{id}/messages:
+    get:
+      summary: Чтение истории сообщений
+      operationId: listConversationMessages
+      description: |
+        Возвращает до 50 сообщений переписки по ID в порядке убывания.
+        Без before_id возвращается последняя страница; с ним — сообщения с id < before_id.
+        Для следующей страницы передайте next_cursor из ответа как before_id.
+        Если более старых сообщений нет, next_cursor равен null.
+        Пустая история возвращается как messages: [] и next_cursor: null.
+        Размер страницы фиксирован; параметр limit не поддерживается.
+        Курсор является границей диапазона и не обязан совпадать с существующим сообщением.
+        Доступ разрешён только участнику, определённому по cookie chat_session.
+        Чужая и отсутствующая переписки дают одинаковый 404.
+        Сессия проверяется до разбора ID и параметров запроса.
+        Чтение не создаёт сообщения, не продлевает сессию и не выдаёт Set-Cookie.
+        Страницы читаются отдельными запросами и не являются снимком всей истории.
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+            maximum: 9223372036854775807
+        - name: before_id
+          in: query
+          required: false
+          description: Исключительная верхняя граница ID. Пустое значение и повторение параметра запрещены.
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+            maximum: 9223372036854775807
+          example: 150
+      responses:
+        '200':
+          description: Страница истории прямого диалога или личной переписки.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConversationMessagePageResponse'
+              examples:
+                lastPage:
+                  value:
+                    messages:
+                      - id: 149
+                        conversation_id: 7
+                        sender_user_id: 42
+                        text: Привет!
+                        created_at: '2026-11-23T12:00:00.123456Z'
+                    next_cursor: null
+                empty:
+                  value:
+                    messages: []
+                    next_cursor: null
+        '400':
+          description: Некорректный ID, курсор или кодирование query-параметров.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidID:
+                  value:
+                    error: invalid conversation ID
+                invalidCursor:
+                  value:
+                    error: message cursor must be a positive integer
+        '401':
+          $ref: '#/components/responses/ConversationUnauthorized'
+        '404':
+          description: Переписка отсутствует либо пользователь не является её участником.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: conversation not found
+        '500':
+          $ref: '#/components/responses/ConversationInternalError'
     post:
       summary: Отправка текстового сообщения
       operationId: createConversationMessage
@@ -1065,6 +1153,26 @@ components:
         Сессионная cookie устанавливается сервером при регистрации или входе.
         Сессия действует 7 дней без продления по активности.
   schemas:
+    ConversationMessagePageResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - messages
+        - next_cursor
+      properties:
+        messages:
+          type: array
+          maxItems: 50
+          description: Сообщения по ID в порядке убывания; пустой результат — массив [], не null.
+          items:
+            $ref: '#/components/schemas/ConversationMessageResponse'
+        next_cursor:
+          type: [integer, 'null']
+          format: int64
+          minimum: 1
+          maximum: 9223372036854775807
+          description: ID последнего сообщения страницы, если есть более старые; иначе null. Передаётся в before_id следующего запроса.
+          example: 100
     ConversationMessageRequest:
       type: object
       additionalProperties: false
