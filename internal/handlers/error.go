@@ -61,6 +61,8 @@ func handleError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusBadRequest, photo.ErrInvalidDimensions)
 	case errors.Is(err, validation.ErrInvalidUsername):
 		writeError(w, http.StatusBadRequest, validation.ErrInvalidUsername)
+	case errors.Is(err, validation.ErrInvalidConversationMessageText):
+		writeError(w, http.StatusBadRequest, validation.ErrInvalidConversationMessageText)
 	case errors.Is(err, validation.ErrInvalidName):
 		writeError(w, http.StatusBadRequest, validation.ErrInvalidName)
 	case errors.Is(err, validation.ErrInvalidPassword):

@@ -1,11 +1,13 @@
 package handlers
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"io"
 	"mime"
 	"net/http"
+	"unicode/utf8"
 )
 
 var (
@@ -23,7 +25,16 @@ func decodeJSONRequest(w http.ResponseWriter, r *http.Request, maxBytes int64, r
 
 	r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
 
-	decoder := json.NewDecoder(r.Body)
+	data, err := io.ReadAll(r.Body)
+	if err != nil {
+		return requestBodyError(err)
+	}
+
+	if !utf8.Valid(data) {
+		return errInvalidRequestBody
+	}
+
+	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
 
 	if err := decoder.Decode(request); err != nil {
