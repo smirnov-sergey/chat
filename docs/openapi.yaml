@@ -830,6 +830,105 @@ paths:
         '500':
           $ref: '#/components/responses/ConversationInternalError'
 
+  /conversations/{id}/messages:
+    post:
+      summary: Отправка текстового сообщения
+      operationId: createConversationMessage
+      description: |
+        Сохраняет сообщение в прямом диалоге или личной переписке текущего пользователя.
+        Отправитель определяется только по cookie chat_session, переписка — по ID пути.
+        Чужая и отсутствующая переписки дают одинаковый 404.
+        Сессия проверяется до разбора ID и тела; участие — до проверки правил текста.
+        Пробелы и переносы строк сохраняются без изменений.
+        Ответ 201 означает сохранение в БД, но не доставку или прочтение собеседником.
+        Каждый успешный запрос создаёт новое сообщение, даже с тем же текстом.
+        Защита от дублей при повторе после потери ответа пока не реализована.
+        Межсайтовые запросы браузера запрещены; UI и API должны иметь один origin.
+        CLI без Origin и Sec-Fetch-Site допустим.
+        Сессия не продлевается, Set-Cookie не выдаётся.
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+            maximum: 9223372036854775807
+      requestBody:
+        required: true
+        description: Один JSON-объект в корректном UTF-8, не более 65536 байт; неизвестные поля запрещены.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConversationMessageRequest'
+      responses:
+        '201':
+          description: Сохранённое сообщение с ID и датой из БД.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConversationMessageResponse'
+        '400':
+          description: Некорректный ID, JSON, UTF-8, неизвестное поле или недопустимый текст.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidID:
+                  value:
+                    error: invalid conversation ID
+                invalidBody:
+                  value:
+                    error: invalid request body
+                invalidText:
+                  value:
+                    error: message text must contain 1 to 4000 Unicode code points, must not be whitespace-only or contain U+0000
+        '401':
+          $ref: '#/components/responses/ConversationUnauthorized'
+        '403':
+          description: Запрос с чужого сайта отклонён до отправки сообщения.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: cross-origin request blocked
+        '404':
+          description: Переписка отсутствует либо пользователь не является её участником.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: conversation not found
+        '413':
+          description: Тело запроса превышает 65536 байт.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: request body too large
+        '415':
+          description: Отсутствует или некорректен Content-Type application/json.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: Content-Type must be application/json
+        '500':
+          $ref: '#/components/responses/ConversationInternalError'
+
   /conversations/{id}:
     get:
       summary: Получение переписки участником
@@ -966,6 +1065,54 @@ components:
         Сессионная cookie устанавливается сервером при регистрации или входе.
         Сессия действует 7 дней без продления по активности.
   schemas:
+    ConversationMessageRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - text
+      properties:
+        text:
+          type: string
+          minLength: 1
+          maxLength: 4000
+          description: |
+            Обычный текст, не состоящий целиком из пробельных символов и без U+0000.
+            Лимит считается в Unicode-кодовых точках (rune), включая пробелы
+            и переносы строк. Текст не обрезается и не нормализуется.
+          example: "Привет!\nКак дела?"
+    ConversationMessageResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - conversation_id
+        - sender_user_id
+        - text
+        - created_at
+      properties:
+        id:
+          type: integer
+          format: int64
+          minimum: 1
+          example: 9
+        conversation_id:
+          type: integer
+          format: int64
+          minimum: 1
+          example: 7
+        sender_user_id:
+          type: integer
+          format: int64
+          minimum: 1
+          example: 42
+        text:
+          type: string
+          example: "Привет!\nКак дела?"
+        created_at:
+          type: string
+          format: date-time
+          description: Дата создания сообщения в UTC, с точностью хранения PostgreSQL.
+          example: '2026-11-23T12:00:00.123456Z'
     ConversationDirectRequest:
       type: object
       additionalProperties: false
