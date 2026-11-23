@@ -13,16 +13,23 @@ import (
 	"chat/internal/validation"
 )
 
-type fakeConversationMessageRepository func(context.Context, *conversation.Message) error
+type fakeConversationMessageRepository struct {
+	create func(context.Context, *conversation.Message) error
+	list   func(context.Context, int64, *int64) (*conversation.MessagePage, error)
+}
 
 func (fake fakeConversationMessageRepository) Create(ctx context.Context, message *conversation.Message) error {
-	return fake(ctx, message)
+	return fake.create(ctx, message)
+}
+
+func (fake fakeConversationMessageRepository) List(ctx context.Context, conversationID int64, beforeID *int64) (*conversation.MessagePage, error) {
+	return fake.list(ctx, conversationID, beforeID)
 }
 
 var (
 	_ service.ConversationMessageAccess     = (*repository.ConversationRepository)(nil)
 	_ service.ConversationMessageRepository = (*repository.ConversationMessageRepository)(nil)
-	_ service.ConversationMessageRepository = fakeConversationMessageRepository(nil)
+	_ service.ConversationMessageRepository = fakeConversationMessageRepository{}
 )
 
 func TestConversationMessageServiceCreate(t *testing.T) {
@@ -41,7 +48,7 @@ func TestConversationMessageServiceCreate(t *testing.T) {
 				return &conversation.Conversation{ID: id, Type: kind}, nil
 			}}
 			var saved *conversation.Message
-			repo := fakeConversationMessageRepository(func(gotCtx context.Context, message *conversation.Message) error {
+			repo := fakeConversationMessageRepository{create: func(gotCtx context.Context, message *conversation.Message) error {
 				if !checked || gotCtx != ctx || message.ID != 0 || message.ConversationID != 7 || message.SenderUserID != 42 || message.Text != text {
 					t.Fatal("creation must follow access checking and preserve the text and IDs")
 				}
@@ -52,7 +59,7 @@ func TestConversationMessageServiceCreate(t *testing.T) {
 				message.CreatedAt = storedAt
 				saved = message
 				return nil
-			})
+			}}
 			got, err := service.NewConversationMessageService(access, repo).Create(ctx, 7, 42, text)
 			if err != nil || got == nil || got != saved || got.ID != 19 || !got.CreatedAt.Equal(storedAt) {
 				t.Fatalf("result = (%+v, %v), want repository result", got, err)
@@ -105,11 +112,11 @@ func TestConversationMessageServiceCreateFailures(t *testing.T) {
 				}
 				return &conversation.Conversation{ID: 7}, tt.lookupError
 			}}
-			repo := fakeConversationMessageRepository(func(_ context.Context, message *conversation.Message) error {
+			repo := fakeConversationMessageRepository{create: func(_ context.Context, message *conversation.Message) error {
 				created = true
 				message.ID = 19
 				return tt.createError
-			})
+			}}
 			got, err := service.NewConversationMessageService(access, repo).Create(ctx, 7, 42, tt.text)
 			if got != nil || !errors.Is(err, tt.want) || lookedUp != tt.wantLookup || created != tt.wantCreate {
 				t.Fatalf("result = (%+v, %v), lookup/create = %v/%v; want error %v, calls %v/%v", got, err, lookedUp, created, tt.want, tt.wantLookup, tt.wantCreate)
