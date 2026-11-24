@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"chat/internal/model/user"
@@ -14,11 +15,16 @@ type rowQueryer interface {
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
 }
 
-type UserRepository struct {
-	db rowQueryer
+type userQueryer interface {
+	rowQueryer
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
 }
 
-func NewUserRepository(db rowQueryer) *UserRepository {
+type UserRepository struct {
+	db userQueryer
+}
+
+func NewUserRepository(db userQueryer) *UserRepository {
 	return &UserRepository{db: db}
 }
 
@@ -76,6 +82,47 @@ func (repo *UserRepository) GetByUsername(ctx context.Context, username string) 
 	return u, nil
 }
 
+func (repo *UserRepository) GetByUsernames(ctx context.Context, usernames []string) ([]user.User, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	users := make([]user.User, 0, len(usernames))
+	if len(usernames) == 0 {
+		return users, nil
+	}
+
+	placeholders := make([]string, len(usernames))
+	args := make([]any, len(usernames))
+	for i, username := range usernames {
+		placeholders[i] = fmt.Sprintf("$%d", i+1)
+		args[i] = username
+	}
+
+	rows, err := repo.db.QueryContext(ctx, `
+		SELECT id, username, name, created_at, updated_at, COALESCE(password_hash, ''), photo
+		FROM users
+		WHERE username IN (`+strings.Join(placeholders, ", ")+")", args...)
+	if err != nil {
+		return nil, fmt.Errorf("get users by usernames: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		u, err := scanUser(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan user: %w", err)
+		}
+		users = append(users, *u)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read users: %w", err)
+	}
+
+	return users, nil
+}
+
 func (repo *UserRepository) GetByID(ctx context.Context, id int64) (*user.User, error) {
 	row := repo.db.QueryRowContext(ctx, `
 		SELECT id, username, name, created_at, updated_at, COALESCE(password_hash, ''), photo
@@ -118,7 +165,7 @@ func (repo *UserRepository) UpdatePhoto(ctx context.Context, id int64, photo *st
 	return previous, nil
 }
 
-func scanUser(row *sql.Row) (*user.User, error) {
+func scanUser(row interface{ Scan(...any) error }) (*user.User, error) {
 	var u user.User
 	if err := row.Scan(
 		&u.ID,

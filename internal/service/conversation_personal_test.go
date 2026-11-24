@@ -53,7 +53,7 @@ func TestConversationServiceCreatePersonal(t *testing.T) {
 				calls = append(calls, "lookup")
 				return want, nil
 			}}
-			got, err := service.NewConversationService(nil, repo, nil, store).CreatePersonal(ctx, 42)
+			got, err := service.NewConversationService(nil, repo, nil, store, nil).CreatePersonal(ctx, 42)
 			if err != nil || got != want {
 				t.Fatalf("result = (%+v, %v), want the stored personal conversation", got, err)
 			}
@@ -73,14 +73,14 @@ func TestConversationServiceCreatePersonal(t *testing.T) {
 
 func TestConversationServiceCreatePersonalInvalidInput(t *testing.T) {
 	for _, userID := range []int64{0, -1} {
-		got, err := service.NewConversationService(nil, nil, nil, nil).CreatePersonal(t.Context(), userID)
+		got, err := service.NewConversationService(nil, nil, nil, nil, nil).CreatePersonal(t.Context(), userID)
 		if got != nil || !errors.Is(err, user.ErrNotFound) {
 			t.Fatalf("user %d: result = (%+v, %v), want nil and user.ErrNotFound", userID, got, err)
 		}
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	got, err := service.NewConversationService(nil, nil, nil, nil).CreatePersonal(ctx, 42)
+	got, err := service.NewConversationService(nil, nil, nil, nil, nil).CreatePersonal(ctx, 42)
 	if got != nil || !errors.Is(err, context.Canceled) {
 		t.Fatalf("result = (%+v, %v), want nil and context.Canceled", got, err)
 	}
@@ -117,7 +117,7 @@ func TestConversationServiceCreatePersonalFailures(t *testing.T) {
 				lookupCalls++
 				return nil, tt.lookupError
 			}}
-			got, err := service.NewConversationService(nil, repo, nil, store).CreatePersonal(ctx, 42)
+			got, err := service.NewConversationService(nil, repo, nil, store, nil).CreatePersonal(ctx, 42)
 			if got != nil || !errors.Is(err, tt.want) {
 				t.Fatalf("result = (%+v, %v), want nil and %v", got, err, tt.want)
 			}

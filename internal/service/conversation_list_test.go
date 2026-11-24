@@ -36,7 +36,7 @@ func TestConversationServiceListByUser(t *testing.T) {
 				}
 				return tt.want, nil
 			}}
-			got, err := service.NewConversationService(nil, repo, nil, nil).ListByUser(ctx, 42)
+			got, err := service.NewConversationService(nil, repo, nil, nil, nil).ListByUser(ctx, 42)
 			if err != nil || calls != 1 || got == nil || !slices.Equal(got, original) {
 				t.Fatalf("result = (%+v, %v), calls = %d; want unchanged list and one lookup", got, err, calls)
 			}
@@ -61,7 +61,7 @@ func TestConversationServiceListByUserInvalidInput(t *testing.T) {
 			if tt.canceled {
 				cancel()
 			}
-			got, err := service.NewConversationService(nil, nil, nil, nil).ListByUser(ctx, tt.userID)
+			got, err := service.NewConversationService(nil, nil, nil, nil, nil).ListByUser(ctx, tt.userID)
 			if got != nil || !errors.Is(err, tt.want) {
 				t.Fatalf("result = (%+v, %v), want nil and %v", got, err, tt.want)
 			}
@@ -75,7 +75,7 @@ func TestConversationServiceListByUserRepositoryErrors(t *testing.T) {
 			repo := fakeConversationRepository{listByUser: func(context.Context, int64) ([]conversation.Conversation, error) {
 				return nil, fmt.Errorf("query failed: %w", want)
 			}}
-			got, err := service.NewConversationService(nil, repo, nil, nil).ListByUser(t.Context(), 42)
+			got, err := service.NewConversationService(nil, repo, nil, nil, nil).ListByUser(t.Context(), 42)
 			if got != nil || !errors.Is(err, want) {
 				t.Fatalf("result = (%+v, %v), want nil and %v", got, err, want)
 			}

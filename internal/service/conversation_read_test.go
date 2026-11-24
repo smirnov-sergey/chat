@@ -22,7 +22,7 @@ func TestConversationServiceGetByID(t *testing.T) {
 		}
 		return want, nil
 	}}
-	got, err := service.NewConversationService(nil, repo, nil, nil).GetByID(ctx, 7, 42)
+	got, err := service.NewConversationService(nil, repo, nil, nil, nil).GetByID(ctx, 7, 42)
 	if err != nil || got != want || calls != 1 {
 		t.Fatalf("result = (%+v, %v), calls = %d; want original conversation and one lookup", got, err, calls)
 	}
@@ -48,7 +48,7 @@ func TestConversationServiceGetByIDRejectsInvalidInput(t *testing.T) {
 			if tt.canceled {
 				cancel()
 			}
-			got, err := service.NewConversationService(nil, nil, nil, nil).GetByID(ctx, tt.conversationID, tt.userID)
+			got, err := service.NewConversationService(nil, nil, nil, nil, nil).GetByID(ctx, tt.conversationID, tt.userID)
 			if got != nil || !errors.Is(err, tt.want) {
 				t.Fatalf("result = (%+v, %v), want nil and %v", got, err, tt.want)
 			}
@@ -62,7 +62,7 @@ func TestConversationServiceGetByIDRepositoryErrors(t *testing.T) {
 			repo := fakeConversationRepository{getByIDForUser: func(context.Context, int64, int64) (*conversation.Conversation, error) {
 				return nil, fmt.Errorf("lookup failed: %w", want)
 			}}
-			got, err := service.NewConversationService(nil, repo, nil, nil).GetByID(t.Context(), 7, 42)
+			got, err := service.NewConversationService(nil, repo, nil, nil, nil).GetByID(t.Context(), 7, 42)
 			if got != nil || !errors.Is(err, want) {
 				t.Fatalf("result = (%+v, %v), want nil and %v", got, err, want)
 			}
