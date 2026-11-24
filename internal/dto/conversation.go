@@ -35,6 +35,22 @@ type ConversationResponse struct {
 	CreatedAt time.Time         `json:"created_at"`
 }
 
+type ConversationListItemResponse struct {
+	ID        int64             `json:"id"`
+	Type      conversation.Type `json:"type"`
+	Title     string            `json:"title"`
+	CreatedAt time.Time         `json:"created_at"`
+}
+
+func ToConversationListItemResponse(item conversation.ListItem) ConversationListItemResponse {
+	return ConversationListItemResponse{
+		ID:        item.ID,
+		Type:      item.Type,
+		Title:     item.Title,
+		CreatedAt: item.CreatedAt.UTC(),
+	}
+}
+
 func ToConversationResponse(c *conversation.Conversation) ConversationResponse {
 	return ConversationResponse{
 		ID:        c.ID,

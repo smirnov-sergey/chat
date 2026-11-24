@@ -22,7 +22,7 @@ import (
 type fakeConversationService struct {
 	createGroup    func(context.Context, int64, string, []string) (*conversation.Group, error)
 	createPersonal func(context.Context, int64) (*conversation.Conversation, error)
-	listByUser     func(context.Context, int64) ([]conversation.Conversation, error)
+	listByUser     func(context.Context, int64) ([]conversation.ListItem, error)
 	createDirect   func(context.Context, int64, string) (*conversation.Conversation, error)
 	getByID        func(context.Context, int64, int64) (*conversation.Conversation, error)
 }
@@ -35,7 +35,7 @@ func (fake fakeConversationService) CreatePersonal(ctx context.Context, currentU
 	return fake.createPersonal(ctx, currentUserID)
 }
 
-func (fake fakeConversationService) ListByUser(ctx context.Context, currentUserID int64) ([]conversation.Conversation, error) {
+func (fake fakeConversationService) ListByUser(ctx context.Context, currentUserID int64) ([]conversation.ListItem, error) {
 	return fake.listByUser(ctx, currentUserID)
 }
 

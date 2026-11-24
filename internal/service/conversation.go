@@ -18,7 +18,7 @@ type ConversationUsers interface {
 }
 
 type ConversationRepository interface {
-	ListByUser(ctx context.Context, currentUserID int64) ([]conversation.Conversation, error)
+	ListByUser(ctx context.Context, currentUserID int64) ([]conversation.ListItem, error)
 	GetByIDForUser(ctx context.Context, conversationID, currentUserID int64) (*conversation.Conversation, error)
 	GetDirectByUsers(ctx context.Context, firstUserID, secondUserID int64) (*conversation.Conversation, error)
 	GetPersonalByUser(ctx context.Context, userID int64) (*conversation.Conversation, error)
@@ -61,7 +61,7 @@ func NewConversationService(
 	}
 }
 
-func (s *ConversationService) ListByUser(ctx context.Context, currentUserID int64) ([]conversation.Conversation, error) {
+func (s *ConversationService) ListByUser(ctx context.Context, currentUserID int64) ([]conversation.ListItem, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}

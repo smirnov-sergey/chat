@@ -1173,6 +1173,9 @@ paths:
       operationId: listUserConversations
       description: |
         Возвращает все переписки текущего пользователя, определённого по сессии.
+        Каждый элемент имеет одинаковый формат: id, type, title, created_at.
+        title — «Избранное» для personal, текущее имя собеседника для direct
+        и текущее название группы для group. Владелец и состав группы не включаются.
         Пагинации нет. Порядок — created_at DESC, затем id DESC.
         Пустой список возвращается как [], а не null. Чужие переписки не включаются.
         Параметры query и заголовки не позволяют выбрать другого пользователя.
@@ -1192,7 +1195,7 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/ConversationResponse'
+                  $ref: '#/components/schemas/ConversationListItemResponse'
         '401':
           $ref: '#/components/responses/ConversationUnauthorized'
         '500':
@@ -1396,7 +1399,7 @@ components:
           example: Семья
     ConversationResponse:
       type: object
-      description: Общие поля переписки. Чтение по ID и список пока не возвращают название и владельца группы.
+      description: Общие поля переписки. Чтение по ID не возвращает название и владельца группы.
       additionalProperties: false
       required:
         - id
@@ -1416,6 +1419,32 @@ components:
           format: date-time
           description: Дата создания переписки в UTC; повторное получение direct или personal не меняет дату. Повторное создание group создаёт новую переписку.
           example: '2026-11-21T12:00:00Z'
+    ConversationListItemResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - type
+        - title
+        - created_at
+      properties:
+        id:
+          type: integer
+          format: int64
+          minimum: 1
+          example: 7
+        type:
+          type: string
+          enum: [direct, personal, group]
+        title:
+          type: string
+          description: «Избранное», имя собеседника или название группы в зависимости от типа переписки.
+          example: Семья
+        created_at:
+          type: string
+          format: date-time
+          description: Дата создания переписки в UTC; изменение title не меняет её.
+          example: '2026-11-24T12:00:00Z'
     UserRegistrationRequest:
       type: object
       additionalProperties: false

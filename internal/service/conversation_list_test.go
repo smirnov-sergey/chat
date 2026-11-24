@@ -17,19 +17,20 @@ func TestConversationServiceListByUser(t *testing.T) {
 	now := time.Date(2026, 11, 21, 12, 0, 0, 0, time.UTC)
 	for _, tt := range []struct {
 		name string
-		want []conversation.Conversation
+		want []conversation.ListItem
 	}{
-		{"ordered conversations", []conversation.Conversation{
-			{ID: 7, Type: conversation.TypeDirect, CreatedAt: now},
-			{ID: 3, Type: conversation.TypeDirect, CreatedAt: now.Add(-time.Hour)},
+		{"ordered conversations", []conversation.ListItem{
+			{ID: 7, Type: conversation.TypeDirect, Title: "Анна", CreatedAt: now},
+			{ID: 3, Type: conversation.TypePersonal, Title: "Избранное", CreatedAt: now.Add(-time.Hour)},
+			{ID: 2, Type: conversation.TypeGroup, Title: "Семья", CreatedAt: now.Add(-2 * time.Hour)},
 		}},
-		{"no conversations", []conversation.Conversation{}},
+		{"no conversations", []conversation.ListItem{}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := t.Context()
 			calls := 0
 			original := slices.Clone(tt.want)
-			repo := fakeConversationRepository{listByUser: func(gotCtx context.Context, currentUserID int64) ([]conversation.Conversation, error) {
+			repo := fakeConversationRepository{listByUser: func(gotCtx context.Context, currentUserID int64) ([]conversation.ListItem, error) {
 				calls++
 				if gotCtx != ctx || currentUserID != 42 {
 					t.Fatal("repository must receive the caller's context and current user ID")
@@ -72,7 +73,7 @@ func TestConversationServiceListByUserInvalidInput(t *testing.T) {
 func TestConversationServiceListByUserRepositoryErrors(t *testing.T) {
 	for _, want := range []error{errors.New("database unavailable"), context.Canceled, context.DeadlineExceeded} {
 		t.Run(want.Error(), func(t *testing.T) {
-			repo := fakeConversationRepository{listByUser: func(context.Context, int64) ([]conversation.Conversation, error) {
+			repo := fakeConversationRepository{listByUser: func(context.Context, int64) ([]conversation.ListItem, error) {
 				return nil, fmt.Errorf("query failed: %w", want)
 			}}
 			got, err := service.NewConversationService(nil, repo, nil, nil, nil).ListByUser(t.Context(), 42)

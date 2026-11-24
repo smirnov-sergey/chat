@@ -150,11 +150,22 @@ func (repo *ConversationRepository) GetGroupByIDForUser(ctx context.Context, con
 	return &group, nil
 }
 
-func (repo *ConversationRepository) ListByUser(ctx context.Context, currentUserID int64) ([]conversation.Conversation, error) {
+func (repo *ConversationRepository) ListByUser(ctx context.Context, currentUserID int64) ([]conversation.ListItem, error) {
 	rows, err := repo.db.QueryContext(ctx, `
-		SELECT c.id, c.type, c.created_at
+		SELECT c.id, c.type, c.created_at,
+			CASE c.type
+				WHEN 'personal' THEN 'Избранное'
+				WHEN 'direct' THEN u.name
+				WHEN 'group' THEN g.name
+			END AS title
 		FROM conversations c
 			JOIN conversations_members m ON m.conversation_id = c.id
+			LEFT JOIN conversations_direct d ON d.conversation_id = c.id AND c.type = 'direct'
+			LEFT JOIN users u ON u.id = CASE
+				WHEN d.low_user_id = $1 THEN d.high_user_id
+				ELSE d.low_user_id
+			END
+			LEFT JOIN conversations_group g ON g.conversation_id = c.id AND c.type = 'group'
 		WHERE m.user_id = $1
 		ORDER BY c.created_at DESC, c.id DESC`,
 		currentUserID,
@@ -164,10 +175,10 @@ func (repo *ConversationRepository) ListByUser(ctx context.Context, currentUserI
 	}
 	defer rows.Close()
 
-	conversations := make([]conversation.Conversation, 0)
+	conversations := make([]conversation.ListItem, 0)
 	for rows.Next() {
-		var c conversation.Conversation
-		if err := rows.Scan(&c.ID, &c.Type, &c.CreatedAt); err != nil {
+		var c conversation.ListItem
+		if err := rows.Scan(&c.ID, &c.Type, &c.CreatedAt, &c.Title); err != nil {
 			return nil, fmt.Errorf("scan user conversation: %w", err)
 		}
 		conversations = append(conversations, c)

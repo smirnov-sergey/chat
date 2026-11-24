@@ -22,13 +22,14 @@ func TestConversationHandlerListByUser(t *testing.T) {
 	createdAt := time.Date(2026, 11, 21, 15, 0, 0, 123456000, time.FixedZone("UTC+3", 3*60*60))
 	for _, tt := range []struct {
 		name          string
-		conversations []conversation.Conversation
+		conversations []conversation.ListItem
 	}{
-		{"ordered list", []conversation.Conversation{
-			{ID: 7, Type: conversation.TypeDirect, CreatedAt: createdAt},
-			{ID: 3, Type: conversation.TypeDirect, CreatedAt: createdAt.Add(-time.Hour)},
+		{"ordered list", []conversation.ListItem{
+			{ID: 7, Type: conversation.TypeDirect, Title: "Анна", CreatedAt: createdAt},
+			{ID: 3, Type: conversation.TypePersonal, Title: "Избранное", CreatedAt: createdAt.Add(-time.Hour)},
+			{ID: 2, Type: conversation.TypeGroup, Title: "Семья", CreatedAt: createdAt.Add(-2 * time.Hour)},
 		}},
-		{"empty list", []conversation.Conversation{}},
+		{"empty list", []conversation.ListItem{}},
 		{"nil list", nil},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -36,7 +37,7 @@ func TestConversationHandlerListByUser(t *testing.T) {
 			ctx := context.WithValue(t.Context(), traceKey{}, "list-trace")
 			original := slices.Clone(tt.conversations)
 			calls := 0
-			s := fakeConversationService{listByUser: func(gotCtx context.Context, currentUserID int64) ([]conversation.Conversation, error) {
+			s := fakeConversationService{listByUser: func(gotCtx context.Context, currentUserID int64) ([]conversation.ListItem, error) {
 				calls++
 				if gotCtx.Value(traceKey{}) != "list-trace" || currentUserID != 42 {
 					t.Fatal("service must receive the request context and verified user ID")
@@ -63,7 +64,11 @@ func TestConversationHandlerListByUser(t *testing.T) {
 				t.Fatalf("unexpected JSON array: %s", rec.Body.String())
 			}
 			for i, c := range tt.conversations {
-				if len(body[i]) != 3 || string(body[i]["id"]) != fmt.Sprint(c.ID) || string(body[i]["type"]) != `"direct"` ||
+				var title string
+				if err := json.Unmarshal(body[i]["title"], &title); err != nil {
+					t.Fatal(err)
+				}
+				if len(body[i]) != 4 || title != c.Title || string(body[i]["id"]) != fmt.Sprint(c.ID) || string(body[i]["type"]) != `"`+string(c.Type)+`"` ||
 					string(body[i]["created_at"]) != `"`+c.CreatedAt.UTC().Format(time.RFC3339Nano)+`"` {
 					t.Fatalf("unexpected item %d: %s", i, rec.Body.String())
 				}
@@ -103,7 +108,7 @@ func TestConversationHandlerListByUserServiceErrors(t *testing.T) {
 		{errors.New("private database details"), http.StatusInternalServerError, "internal server error"},
 	} {
 		t.Run(tt.message, func(t *testing.T) {
-			s := fakeConversationService{listByUser: func(context.Context, int64) ([]conversation.Conversation, error) {
+			s := fakeConversationService{listByUser: func(context.Context, int64) ([]conversation.ListItem, error) {
 				return nil, fmt.Errorf("list failed: %w", tt.err)
 			}}
 			handler := handlers.SessionMiddleware(conversationSessionAuthenticator{})(http.HandlerFunc(handlers.NewConversationHandler(s).ListByUser))

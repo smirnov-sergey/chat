@@ -31,7 +31,7 @@ func (fake fakeConversationUsers) GetByUsernames(ctx context.Context, usernames 
 type fakeConversationRepository struct {
 	getGroupByIDForUser func(context.Context, int64, int64) (*conversation.Group, error)
 	getPersonalByUser   func(context.Context, int64) (*conversation.Conversation, error)
-	listByUser          func(context.Context, int64) ([]conversation.Conversation, error)
+	listByUser          func(context.Context, int64) ([]conversation.ListItem, error)
 	getDirectByUsers    func(context.Context, int64, int64) (*conversation.Conversation, error)
 	getByIDForUser      func(context.Context, int64, int64) (*conversation.Conversation, error)
 }
@@ -44,7 +44,7 @@ func (fake fakeConversationRepository) GetPersonalByUser(ctx context.Context, us
 	return fake.getPersonalByUser(ctx, userID)
 }
 
-func (fake fakeConversationRepository) ListByUser(ctx context.Context, currentUserID int64) ([]conversation.Conversation, error) {
+func (fake fakeConversationRepository) ListByUser(ctx context.Context, currentUserID int64) ([]conversation.ListItem, error) {
 	return fake.listByUser(ctx, currentUserID)
 }
 

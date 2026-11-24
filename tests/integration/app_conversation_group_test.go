@@ -87,14 +87,20 @@ func testAppConversationGroup(t *testing.T, ctx context.Context, db *sql.DB, cli
 		if read.ID != created[0].ID || read.Type != conversation.TypeGroup {
 			t.Fatalf("unexpected conversation: %+v", read)
 		}
-		var list []dto.ConversationResponse
+		var list []dto.ConversationListItemResponse
 		if err := json.Unmarshal(request("GET", "/conversations", "", cookie, 200), &list); err != nil {
 			t.Fatal(err)
 		}
 		found := 0
 		for _, c := range list {
 			if c.ID == created[0].ID || c.ID == created[1].ID {
+				if c.Title != "Семья" {
+					t.Fatalf("unexpected group title: %q", c.Title)
+				}
 				found++
+			}
+			if c.Type == conversation.TypePersonal && c.Title != "Избранное" {
+				t.Fatalf("unexpected personal title: %q", c.Title)
 			}
 		}
 		if found != 2 {

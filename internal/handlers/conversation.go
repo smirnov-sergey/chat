@@ -14,7 +14,7 @@ const maxConversationDirectBodyBytes = 4 << 10
 const maxConversationGroupBodyBytes = 16 << 10
 
 type ConversationService interface {
-	ListByUser(ctx context.Context, currentUserID int64) ([]conversation.Conversation, error)
+	ListByUser(ctx context.Context, currentUserID int64) ([]conversation.ListItem, error)
 	GetByID(ctx context.Context, conversationID, currentUserID int64) (*conversation.Conversation, error)
 	CreateDirect(ctx context.Context, currentUserID int64, recipientUsername string) (*conversation.Conversation, error)
 	CreatePersonal(ctx context.Context, currentUserID int64) (*conversation.Conversation, error)
@@ -44,9 +44,9 @@ func (h *ConversationHandler) ListByUser(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	response := make([]dto.ConversationResponse, len(conversations))
+	response := make([]dto.ConversationListItemResponse, len(conversations))
 	for i := range conversations {
-		response[i] = dto.ToConversationResponse(&conversations[i])
+		response[i] = dto.ToConversationListItemResponse(conversations[i])
 	}
 
 	writeJSON(w, http.StatusOK, response)

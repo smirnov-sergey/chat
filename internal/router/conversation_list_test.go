@@ -28,12 +28,12 @@ func TestConversationListRoute(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			calls := 0
-			conversations := fakeConversationService{listByUser: func(ctx context.Context, currentUserID int64) ([]conversation.Conversation, error) {
+			conversations := fakeConversationService{listByUser: func(ctx context.Context, currentUserID int64) ([]conversation.ListItem, error) {
 				calls++
 				if currentUserID != 42 {
 					t.Fatal("route must use the verified user ID")
 				}
-				return []conversation.Conversation{}, nil
+				return []conversation.ListItem{}, nil
 			}}
 			sessions := fakeSessionAuthenticator(func(_ context.Context, token string) (*session.Session, error) {
 				if token != "valid" {
