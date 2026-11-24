@@ -165,6 +165,9 @@ func TestAppRunAuthentication(t *testing.T) {
 	t.Run("conversation messages", func(t *testing.T) {
 		testAppConversationMessages(t, ctx, db, client, baseURL, cookies[0], otherCookies[0])
 	})
+	t.Run("group conversation", func(t *testing.T) {
+		testAppConversationGroup(t, ctx, db, client, baseURL, cookies[0], otherCookies[0])
+	})
 	t.Run("profile photo lifecycle", func(t *testing.T) {
 		readPhoto := func(cookie *http.Cookie, wantStatus int) []byte {
 			t.Helper()
