@@ -7,6 +7,7 @@ type Type string
 const (
 	TypeDirect   Type = "direct"
 	TypePersonal Type = "personal"
+	TypeGroup    Type = "group"
 )
 
 type Conversation struct {

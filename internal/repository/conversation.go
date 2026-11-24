@@ -127,6 +127,29 @@ func (repo *ConversationRepository) GetByIDForUser(ctx context.Context, conversa
 	return c, nil
 }
 
+func (repo *ConversationRepository) GetGroupByIDForUser(ctx context.Context, conversationID, currentUserID int64) (*conversation.Group, error) {
+	var group conversation.Group
+
+	err := repo.db.QueryRowContext(ctx, `
+		SELECT c.id, c.type, c.created_at, g.owner_user_id, g.name
+		FROM conversations c
+			JOIN conversations_group g ON g.conversation_id = c.id
+			JOIN conversations_members m ON m.conversation_id = c.id
+		WHERE c.id = $1
+		  AND m.user_id = $2`, conversationID, currentUserID).
+		Scan(&group.ID, &group.Type, &group.CreatedAt, &group.OwnerUserID, &group.Name)
+
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, conversation.ErrNotFound
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("get group conversation by ID for user: %w", err)
+	}
+
+	return &group, nil
+}
+
 func (repo *ConversationRepository) ListByUser(ctx context.Context, currentUserID int64) ([]conversation.Conversation, error) {
 	rows, err := repo.db.QueryContext(ctx, `
 		SELECT c.id, c.type, c.created_at
@@ -198,6 +221,18 @@ func (repo *ConversationRepository) createPersonal(ctx context.Context, conversa
 
 	if err != nil {
 		return fmt.Errorf("create personal conversation owner: %w", err)
+	}
+
+	return nil
+}
+
+func (repo *ConversationRepository) createGroup(ctx context.Context, group *conversation.Group) error {
+	_, err := repo.db.ExecContext(ctx, `
+		INSERT INTO conversations_group (conversation_id, owner_user_id, name)
+		VALUES ($1, $2, $3)`, group.ID, group.OwnerUserID, group.Name)
+
+	if err != nil {
+		return fmt.Errorf("create group conversation details: %w", err)
 	}
 
 	return nil

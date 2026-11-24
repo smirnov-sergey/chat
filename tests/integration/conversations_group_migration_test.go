@@ -91,9 +91,9 @@ func TestConversationsGroupMigration(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	const insertGroup = "INSERT INTO conversations_group (conversation_id, name, owner_user_id) VALUES ($1, $2, $3)"
+	const insertGroup = "INSERT INTO conversations_group (conversation_id, owner_user_id, name) VALUES ($1, $2, $3)"
 	for _, id := range groupIDs[:2] {
-		if _, err := db.ExecContext(ctx, insertGroup, id, "Семья", userIDs[0]); err != nil {
+		if _, err := db.ExecContext(ctx, insertGroup, id, userIDs[0], "Семья"); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -104,13 +104,13 @@ func TestConversationsGroupMigration(t *testing.T) {
 		code       string
 		constraint string
 	}{
-		{"duplicate conversation", insertGroup, []any{groupIDs[0], "Другая группа", userIDs[0]}, "23505", "conversations_group_pkey"},
-		{"missing conversation", insertGroup, []any{nil, "Семья", userIDs[0]}, "23502", ""},
-		{"missing name", insertGroup, []any{groupIDs[2], nil, userIDs[0]}, "23502", ""},
-		{"missing owner", insertGroup, []any{groupIDs[2], "Семья", nil}, "23502", ""},
-		{"unknown conversation", insertGroup, []any{int64(-1), "Семья", userIDs[0]}, "23503", ""},
-		{"unknown owner", insertGroup, []any{groupIDs[2], "Семья", int64(-1)}, "23503", "conversations_group_owner_member_fkey"},
-		{"owner belongs to another conversation", insertGroup, []any{groupIDs[2], "Семья", userIDs[1]}, "23503", "conversations_group_owner_member_fkey"},
+		{"duplicate conversation", insertGroup, []any{groupIDs[0], userIDs[0], "Другая группа"}, "23505", "conversations_group_pkey"},
+		{"missing conversation", insertGroup, []any{nil, userIDs[0], "Семья"}, "23502", ""},
+		{"missing name", insertGroup, []any{groupIDs[2], userIDs[0], nil}, "23502", ""},
+		{"missing owner", insertGroup, []any{groupIDs[2], nil, "Семья"}, "23502", ""},
+		{"unknown conversation", insertGroup, []any{int64(-1), userIDs[0], "Семья"}, "23503", ""},
+		{"unknown owner", insertGroup, []any{groupIDs[2], int64(-1), "Семья"}, "23503", "conversations_group_owner_member_fkey"},
+		{"owner belongs to another conversation", insertGroup, []any{groupIDs[2], userIDs[1], "Семья"}, "23503", "conversations_group_owner_member_fkey"},
 		{"remove owner membership", "DELETE FROM conversations_members WHERE conversation_id = $1 AND user_id = $2", []any{groupIDs[0], userIDs[0]}, "23503", "conversations_group_owner_member_fkey"},
 		{"change owner to outsider", "UPDATE conversations_group SET owner_user_id = $2 WHERE conversation_id = $1", []any{groupIDs[0], userIDs[1]}, "23503", "conversations_group_owner_member_fkey"},
 	} {
@@ -151,9 +151,9 @@ func TestConversationsGroupMigration(t *testing.T) {
 		var ownerID int64
 		var createdAt time.Time
 		if err := db.QueryRowContext(ctx, `
-			SELECT g.name, g.owner_user_id, c.type, c.created_at
+			SELECT g.owner_user_id, g.name, c.type, c.created_at
 			FROM conversations_group g JOIN conversations c ON c.id = g.conversation_id
-			WHERE g.conversation_id = $1`, id).Scan(&name, &ownerID, &kind, &createdAt); err != nil {
+			WHERE g.conversation_id = $1`, id).Scan(&ownerID, &name, &kind, &createdAt); err != nil {
 			t.Fatal(err)
 		}
 		if name != "Семья" || ownerID != userIDs[0] || kind != "group" || !createdAt.Equal(now) {
