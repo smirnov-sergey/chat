@@ -37,6 +37,10 @@ func handleError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusBadRequest, conversation.ErrInvalidCursor)
 	case errors.Is(err, conversation.ErrInvalidParticipants):
 		writeError(w, http.StatusBadRequest, conversation.ErrInvalidParticipants)
+	case errors.Is(err, conversation.ErrInvalidGroupParticipants):
+		writeError(w, http.StatusBadRequest, conversation.ErrInvalidGroupParticipants)
+	case errors.Is(err, validation.ErrInvalidConversationGroupName):
+		writeError(w, http.StatusBadRequest, validation.ErrInvalidConversationGroupName)
 	case errors.Is(err, user.ErrPhotoNotFound):
 		writeError(w, http.StatusNotFound, user.ErrPhotoNotFound)
 	case errors.Is(err, errInvalidUserID):

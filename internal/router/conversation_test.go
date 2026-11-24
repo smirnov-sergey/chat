@@ -14,10 +14,15 @@ import (
 )
 
 type fakeConversationService struct {
+	createGroup    func(context.Context, int64, string, []string) (*conversation.Group, error)
 	createPersonal func(context.Context, int64) (*conversation.Conversation, error)
 	listByUser     func(context.Context, int64) ([]conversation.Conversation, error)
 	createDirect   func(context.Context, int64, string) (*conversation.Conversation, error)
 	getByID        func(context.Context, int64, int64) (*conversation.Conversation, error)
+}
+
+func (fake fakeConversationService) CreateGroup(ctx context.Context, id int64, name string, usernames []string) (*conversation.Group, error) {
+	return fake.createGroup(ctx, id, name, usernames)
 }
 
 func (fake fakeConversationService) CreatePersonal(ctx context.Context, currentUserID int64) (*conversation.Conversation, error) {

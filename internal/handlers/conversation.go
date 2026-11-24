@@ -11,12 +11,14 @@ import (
 )
 
 const maxConversationDirectBodyBytes = 4 << 10
+const maxConversationGroupBodyBytes = 16 << 10
 
 type ConversationService interface {
 	ListByUser(ctx context.Context, currentUserID int64) ([]conversation.Conversation, error)
 	GetByID(ctx context.Context, conversationID, currentUserID int64) (*conversation.Conversation, error)
 	CreateDirect(ctx context.Context, currentUserID int64, recipientUsername string) (*conversation.Conversation, error)
 	CreatePersonal(ctx context.Context, currentUserID int64) (*conversation.Conversation, error)
+	CreateGroup(ctx context.Context, currentUserID int64, name string, usernames []string) (*conversation.Group, error)
 }
 
 type ConversationHandler struct {
@@ -119,4 +121,33 @@ func (h *ConversationHandler) CreatePersonal(w http.ResponseWriter, r *http.Requ
 	}
 
 	writeJSON(w, http.StatusOK, dto.ToConversationResponse(c))
+}
+
+func (h *ConversationHandler) CreateGroup(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+
+	currentUserID, ok := userIDFromContext(r.Context())
+	if !ok {
+		handleError(w, session.ErrInvalid)
+		return
+	}
+
+	var request *dto.ConversationGroupRequest
+	if err := decodeJSONRequest(w, r, maxConversationGroupBodyBytes, &request); err != nil {
+		handleError(w, err)
+		return
+	}
+
+	if request == nil {
+		handleError(w, errInvalidRequestBody)
+		return
+	}
+
+	group, err := h.conversationService.CreateGroup(r.Context(), currentUserID, request.Name, request.Usernames)
+	if err != nil {
+		handleError(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, dto.ToConversationGroupResponse(group))
 }
