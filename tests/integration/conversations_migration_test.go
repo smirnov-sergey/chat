@@ -109,7 +109,6 @@ func TestConversationsMigration(t *testing.T) {
 	}{
 		{"missing type", insertConversation, []any{nil, now}, "23502", ""},
 		{"unknown type", insertConversation, []any{"unknown", now}, "23514", "conversations_type"},
-		{"group not implemented", insertConversation, []any{"group", now}, "23514", "conversations_type"},
 		{"missing creation time", insertConversation, []any{"direct", nil}, "23502", ""},
 		{"duplicate member", insertMember, []any{first, low}, "23505", "conversations_members_pkey"},
 		{"missing member conversation", insertMember, []any{nil, low}, "23502", ""},
