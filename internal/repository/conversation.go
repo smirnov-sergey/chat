@@ -24,6 +24,21 @@ func NewConversationRepository(db conversationQueryer) *ConversationRepository {
 	return &ConversationRepository{db: db}
 }
 
+func (repo *ConversationRepository) lockByID(ctx context.Context, conversationID int64) error {
+	var id int64
+
+	err := repo.db.QueryRowContext(ctx, `SELECT id  FROM conversations WHERE id = $1 FOR NO KEY UPDATE`, conversationID).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return conversation.ErrNotFound
+	}
+
+	if err != nil {
+		return fmt.Errorf("lock conversation: %w", err)
+	}
+
+	return nil
+}
+
 func (repo *ConversationRepository) Create(ctx context.Context, c *conversation.Conversation) error {
 	var id int64
 	var createdAt time.Time

@@ -38,7 +38,7 @@ func TestConversationMessageServiceList(t *testing.T) {
 						listed = true
 						return want, nil
 					}}
-					got, err := service.NewConversationMessageService(access, repo).List(ctx, 7, 42, beforeID)
+					got, err := service.NewConversationMessageService(access, repo, nil).List(ctx, 7, 42, beforeID)
 					if err != nil || got != want || !listed || cursor != 150 {
 						t.Fatalf("result = (%+v, %v), want unchanged repository page", got, err)
 					}
@@ -50,7 +50,7 @@ func TestConversationMessageServiceList(t *testing.T) {
 
 func TestConversationMessageServiceListInvalidIDs(t *testing.T) {
 	for _, ids := range [][2]int64{{0, 42}, {-1, 42}, {7, 0}, {7, -1}} {
-		got, err := service.NewConversationMessageService(nil, nil).List(t.Context(), ids[0], ids[1], nil)
+		got, err := service.NewConversationMessageService(nil, nil, nil).List(t.Context(), ids[0], ids[1], nil)
 		if got != nil || !errors.Is(err, conversation.ErrNotFound) {
 			t.Fatalf("IDs %v: result = (%+v, %v), want not found", ids, got, err)
 		}
@@ -95,7 +95,7 @@ func TestConversationMessageServiceListFailures(t *testing.T) {
 				listed = true
 				return &conversation.MessagePage{}, fmt.Errorf("repository: %w", tt.listError)
 			}}
-			got, err := service.NewConversationMessageService(access, repo).List(ctx, 7, 42, tt.beforeID)
+			got, err := service.NewConversationMessageService(access, repo, nil).List(ctx, 7, 42, tt.beforeID)
 			if got != nil || !errors.Is(err, tt.want) || checked != tt.wantAccess || listed != tt.wantList {
 				t.Fatalf("result = (%+v, %v), access/list=%v/%v; want %v, %v/%v", got, err, checked, listed, tt.want, tt.wantAccess, tt.wantList)
 			}

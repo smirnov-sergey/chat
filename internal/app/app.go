@@ -76,7 +76,8 @@ func Run(ctx context.Context, cfg config.Config) error {
 	conversationHandler := handlers.NewConversationHandler(conversationService)
 
 	conversationMessageRepository := repository.NewConversationMessageRepository(db)
-	conversationMessageService := service.NewConversationMessageService(conversationRepository, conversationMessageRepository)
+	conversationMessageStore := repository.NewConversationMessageStore(db)
+	conversationMessageService := service.NewConversationMessageService(conversationRepository, conversationMessageRepository, conversationMessageStore)
 	conversationMessageHandler := handlers.NewConversationMessageHandler(conversationMessageService)
 
 	appRouter := router.New(userHandler, conversationHandler, conversationMessageHandler)
